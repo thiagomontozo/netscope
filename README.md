@@ -41,20 +41,24 @@ Normalized statuses are `HEALTHY`, `INFORMATIONAL`, `ATTENTION`, `WARNING`, `CRI
 
 NetScope starts as a modular monolith. Domain boundaries remain transport-agnostic so deployment complexity can grow only when justified.
 
-```text
-React + TypeScript
-        |
-        v
-      Go API ---- PostgreSQL
-        |         Local Object Storage
-        |         Scheduler / Job Orchestrator
-        |         Scan Guard / Module Registry
-        |         Correlation / Evidence
-        v
-   Agent Gateway (HTTPS / mTLS)
-        |
-        v
-  Outbound NetScope Agents
+```mermaid
+flowchart TD
+    Users --> React[React analyst workspace]
+    React --> Go[Go Control Plane]
+    Go --> Guard[Scan Guard]
+    Guard --> Jobs[Job Orchestrator]
+    Jobs --> Gateway[Agent Gateway]
+    Gateway --> Agents[Distributed NetScope Agents]
+    Agents --> Networks[Authorized Networks / Services]
+```
+
+```mermaid
+flowchart TD
+    Observations[Agent observations] --> Normalization
+    Normalization --> Evidence[Network Evidence]
+    Evidence --> Correlation[Deterministic correlation]
+    Correlation --> Outcome[Finding / Incident]
+    Outcome --> Explanation[Human-readable explanation]
 ```
 
 See [Architecture](docs/architecture.md) and the [decision records](docs/decisions/).
@@ -77,6 +81,12 @@ The control plane owns organizations, authorization, policies, scopes, agents, m
 Agents initiate outbound connections. Enrollment tokens are short-lived and single-use; after enrollment the agent receives its own cryptographic identity. The control plane can revoke and rotate identity, inspect the fingerprint and dispatch only compatible jobs. The agent API is separate at `/agent/v1` and must require strongly verified agent identity.
 
 The agent implementation lives in a separate repository: `thiagomontozo/netscope-agent`. This control plane implements the complete enrollment contract: a short-lived single-use token authorizes one CSR, the control plane signs a 90-day client certificate with an externally supplied CA, persists its fingerprint, and requires the active certificate for heartbeat, polling, job transitions and result import.
+
+## Protocol Compatibility
+
+NetScope Agent Protocol `1.0` is specified under [`contracts/agent/v1`](contracts/agent/v1/README.md). Enrollment, heartbeat, capability manifests, job envelopes, results, failures, cancellation and evidence have machine-readable JSON Schemas. The Control Plane stores `COMPATIBLE`, `UPGRADE_RECOMMENDED`, `INCOMPATIBLE` or `UNKNOWN`; capability and ScanGuard checks remain independent of version compatibility.
+
+Result delivery is idempotent by job and result identity/version. Repeating the accepted result is a no-op; a conflicting result is rejected. Ed25519 envelope signing is a documented, inactive interface until protected key management and trust distribution are configured. mTLS remains mandatory.
 
 ## Authorized Scope
 
@@ -107,7 +117,19 @@ Assets are organization-scoped hosts, servers, workstations, network devices, se
 
 ## Asset 360
 
-Asset 360 is the central asset workspace with Overview, Connectivity, Route, Services, Traffic, Security, Performance, Timeline and Evidence tabs. It brings together availability, latency, loss, services, TLS, DNS, findings, vulnerabilities, IDS observations, agent coverage and recent evidence. Empty data remains explicitly inconclusive.
+Asset 360 is the central asset workspace with Overview, Connectivity, Services, Routes, Traffic, Security, Performance, Incidents, Timeline and Evidence tabs. It answers reachability, vantage coverage, recent changes, active incidents, priority findings, public exposure, certificate state and the latest diagnostic without treating missing data as health.
+
+## Service 360
+
+Service 360 follows the chain Asset → Service → DNS/TCP/TLS/HTTP → Exposure → Vulnerability → Finding/Incident. It presents protocol reachability, certificate and HTTP context, routes, vantage points, recent changes and evidence for one endpoint such as `service.example.invalid:443`.
+
+## Multi-Vantage Diagnostics
+
+Vantage Points represent agents, sites, branches, datacenters, DMZs, external sensors or cloud locations. Safe Diagnostic Profiles group coherent module jobs without accepting commands. When two locations can reach a service and one cannot, NetScope reports a probable path- or location-specific issue instead of declaring a global outage.
+
+## Incident Timeline
+
+Incidents combine operational symptoms, findings, diagnostics, agents, assets and services in a chronological timeline. Root cause remains independently `UNKNOWN`, `SUSPECTED`, `IDENTIFIED` or `INCONCLUSIVE`. Evidence is curated as key, supporting or context; an Incident Evidence Report preserves limitations and never invents root cause.
 
 ## Network Diagnostics
 
@@ -193,7 +215,15 @@ A Finding is a reviewable or actionable conclusion built from observations. It h
 
 ## Evidence
 
-Evidence records provenance, content type, a safe summary, optional structured data, checksum and an opaque object-storage key. Technical Evidence is permission-controlled using `evidence.raw.read`; PCAP download has its own permission.
+Network Evidence records what/how/from where/when a result was observed, including module, agent, job, vantage point, content type, structured result, SHA-256, size and opaque object-storage references. Evidence integrity metadata helps detect unintended artifact changes. It is not a claim of forensic certification, court admissibility or tamper-proof storage. Technical Evidence is permission-controlled using `evidence.raw.read`; PCAP download has its own permission.
+
+## Evidence-first Findings
+
+Findings and correlations expose “Why am I seeing this?” through deterministic inputs, rules, evidence and confidence. Severity describes technical seriousness; contextual risk and priority additionally consider exploitation evidence, approved public exposure, service presence, asset criticality, confidence and age. Inconclusive remains a valid visible result.
+
+## No Arbitrary Shell Commands
+
+Neither browser nor Agent Protocol accepts shell commands, raw CLI strings or arbitrary arguments. Jobs contain a registered `moduleId`, Authorized Scope-derived target and parameters validated against the module profile/schema.
 
 ## Confidence Model
 
@@ -270,6 +300,7 @@ GitHub Actions validates Go formatting, module integrity, static checks, package
 ```text
 backend/       Go control plane, domains, adapters and migrations
 frontend/      React analyst workspace
+contracts/     Versioned, machine-readable Control Plane/Agent contracts
 docs/          architecture, security, domain guides and ADRs
 deploy/        frontend reverse-proxy configuration
 compose.yml    local deployment topology

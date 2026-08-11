@@ -1,5 +1,11 @@
 # Authorized Scope
 
+Active targets derive from `AuthorizedScope + Asset + optional NetworkService`.
+The scope supplies the normalized target; asset/service IDs supply only
+organization-validated context and cannot replace or override it. Public work
+requires current approval/verification, validity, `public_scan.run`, compatible
+module/agent and every normal ScanGuard policy.
+
 Authorized Scope is the source of every active target. It is organization-owned and records type, normalized value, internal/public environment, status, verification method, verifier, validity window and notes.
 
 ## Lifecycle

@@ -1,5 +1,12 @@
 # Scan Guard
 
+Before authorization, job context validation proves that asset, optional
+service, optional Diagnostic Run, optional Vantage Point and agent all belong to
+the active organization and have coherent relationships. ScanGuard then checks
+RBAC, scope activity, public permission, module/environment/risk, capability,
+maintenance window, rate, concurrency, schema, normalized target and bounded
+timeout. The scheduler and browser-facing job handler cannot bypass this path.
+
 Scan Guard is the mandatory policy decision point for active work. It evaluates the authenticated user, active organization, scope ownership/state/window, environment, module status/risk, public permission, input schema, compatible agent, maintenance window, rate, concurrency, normalized target and bounded timeout.
 
 The result is an allow decision with normalized target and deadline, or a deny decision with a stable code such as `SCOPE_NOT_AUTHORIZED`, `PERMISSION_DENIED`, `AGENT_INCOMPATIBLE`, `RATE_LIMITED` or `INVALID_PARAMETERS`.

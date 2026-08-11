@@ -1,5 +1,12 @@
 # Security Model
 
+Protocol v1 adds explicit compatibility, result idempotency and target-context
+binding without weakening mTLS, Authorized Scope or ScanGuard. The Agent API
+rejects unknown request fields and mismatched protocol/job/agent/module IDs.
+Failure codes are bounded and never include stack traces. Ed25519 job signing is
+an inactive interface until protected key configuration and trust distribution
+are completed; documentation does not claim it is currently active.
+
 ## Positioning and trust
 
 NetScope supports diagnostics, monitoring and authorized assessment. It assumes browsers, agents, uploaded files, scanner output and network responses are untrusted. The control plane is the policy authority; agents are constrained executors, not administrative peers.

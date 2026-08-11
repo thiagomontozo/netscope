@@ -1,5 +1,11 @@
 # Observations
 
+Observations are immutable time-bound facts. Change Observations separately
+record service, DNS, certificate, route, HTTP-pattern or capability changes with
+previous/current structured values and confidence. A change does not become an
+incident automatically. Multi-vantage disagreement produces an attention or
+inconclusive explanation rather than overwriting individual observations.
+
 An Observation is a factual, time-bound statement produced by a known module and job. It stores category, normalized status, severity, confidence, title, summary, meaning, impact, suggested action, observation time, evidence count and optional raw reference.
 
 Good language separates layers:

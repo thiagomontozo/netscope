@@ -1,5 +1,23 @@
 # API
 
+## Investigation API
+
+- `POST /api/v1/vantage-points`
+- `GET /api/v1/vantage-points`
+- `POST /api/v1/services`
+- `GET /api/v1/services[/:id]`
+- `POST /api/v1/diagnostic-runs`
+- `GET /api/v1/diagnostic-runs[/:id]`
+- `POST /api/v1/incidents`
+- `GET /api/v1/incidents[/:id]`
+- `GET /api/v1/incidents/:id/workspace`
+- `POST /api/v1/incidents/:id/events`
+- `POST /api/v1/incidents/:id/evidence`
+- `POST /api/v1/incidents/:id/evidence-report`
+
+The Agent API is documented in [Agent Protocol](agent-protocol.md) and its
+machine-readable schemas. Browser sessions never authorize `/agent/v1`.
+
 Browser routes use `/api/v1`; agent routes use `/agent/v1`. Browser calls use secure sessions and organization context restored server-side. Agent calls require verified cryptographic identity and are never browser-accessible.
 
 Resources include auth, users, roles, permissions, assets, scopes, agents, modules, jobs, schedules, observations, findings, evidence, vulnerabilities, traffic, PCAP, reports, notifications and audit. SSE at `/api/v1/events` carries progress, agent, notification and finding updates.

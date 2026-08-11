@@ -1,5 +1,11 @@
 # Agents
 
+Agents implement [Protocol v1](agent-protocol.md), connect outbound and report a
+versioned capability manifest. The Control Plane stores protocol compatibility,
+heartbeat health, slots and vantage association. Centralized grace thresholds
+move agents through online, degraded and offline states; a single late heartbeat
+does not imply outage. Enrollment tokens are never durable credentials.
+
 Agents are separately deployed workers from `thiagomontozo/netscope-agent`. They connect outbound, making common NAT and firewall deployments simpler.
 
 ## Enrollment

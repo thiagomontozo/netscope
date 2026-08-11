@@ -1,5 +1,19 @@
 # Architecture
 
+## Investigation data flow
+
+```text
+Distributed Agents -> normalized observations -> Network Evidence
+Network Evidence -> deterministic correlation -> Finding / Incident
+Vantage histories -> route/service comparison -> Change Observation
+Incident links + timeline + evidence roles -> Incident Evidence Report
+```
+
+PostgreSQL remains the source of truth for identities, provenance and normalized
+metadata. Artifact bytes remain behind `ObjectStorage`. New incident, service,
+vantage and protocol boundaries are modules within the existing monolith, not
+new microservices.
+
 ## Context
 
 NetScope is a modular monolith: one Go deployment owns policy and transactional workflows while React provides the analyst workspace. PostgreSQL is the source of truth. Large sensitive artifacts use an opaque-key Object Storage boundary.

@@ -1,5 +1,11 @@
 # Modules
 
+Every `ModuleDefinition` now declares protocol version, supported platforms,
+parameter schema version and result schema version in addition to identity,
+risk, environment, capability and timeout. Diagnostic Profiles are allowlists of
+module IDs; neither profiles nor jobs contain shell commands, CLI strings or
+arbitrary flags.
+
 A module is a versioned, typed capability. It declares category, `PASSIVE`/`SAFE_ACTIVE`/`CONTROLLED_ACTIVE` risk, supported environments, required capabilities, timeout, input schema, result schema and enabled state.
 
 The registry associates each definition with a parameter validator, executor boundary and result parser. Code calls the registry; tool-specific branching does not leak through the domain.
