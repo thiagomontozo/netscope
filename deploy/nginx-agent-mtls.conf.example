@@ -1,0 +1,16 @@
+# Example dedicated mTLS gateway for /agent/v1. Certificate files are deliberately
+# excluded from Git and must be supplied by the deployment secret manager.
+server {
+  listen 8443 ssl;
+  server_name agents.example.invalid;
+  ssl_certificate /run/secrets/server.crt;
+  ssl_certificate_key /run/secrets/server.key;
+  ssl_client_certificate /run/secrets/agent-ca.crt;
+  ssl_verify_client on;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  location /agent/v1/ {
+    proxy_pass http://backend:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Request-ID $request_id;
+  }
+}

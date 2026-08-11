@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-netscope}
+      POSTGRES_USER: ${POSTGRES_USER:-netscope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      NETSCOPE_ENV: ${NETSCOPE_ENV:-development}
+      NETSCOPE_ADDRESS: :8080
+      NETSCOPE_DATABASE_URL: postgres://${POSTGRES_USER:-netscope}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-netscope}?sslmode=disable
+      NETSCOPE_STORAGE_PATH: /var/lib/netscope/storage
+      NETSCOPE_MASTER_KEY: ${NETSCOPE_MASTER_KEY:-}
+    volumes:
+      - object-storage:/var/lib/netscope/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports: ["8088:80"]
+    depends_on: [backend]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+volumes:
+  postgres-data:
+  object-storage:
