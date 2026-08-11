@@ -16,6 +16,7 @@ type ScopeReader interface {
 }
 type JobWriter interface {
 	CreateAuthorized(context.Context, domain.AnalysisJob, string) error
+	ValidateJobContext(context.Context, domain.ID, domain.ID, *domain.ID, *domain.ID, *domain.ID, domain.ID) error
 }
 type Jobs struct {
 	Registry      *modules.Registry
@@ -25,11 +26,14 @@ type Jobs struct {
 	MaxConcurrent int
 }
 type createJobRequest struct {
-	ModuleID   string          `json:"moduleId"`
-	ScopeID    domain.ID       `json:"scopeId"`
-	AssetID    domain.ID       `json:"assetId"`
-	AgentID    domain.ID       `json:"agentId"`
-	Parameters json.RawMessage `json:"parameters"`
+	ModuleID        string          `json:"moduleId"`
+	ScopeID         domain.ID       `json:"scopeId"`
+	AssetID         domain.ID       `json:"assetId"`
+	ServiceID       *domain.ID      `json:"serviceId"`
+	DiagnosticRunID *domain.ID      `json:"diagnosticRunId"`
+	VantagePointID  *domain.ID      `json:"vantagePointId"`
+	AgentID         domain.ID       `json:"agentId"`
+	Parameters      json.RawMessage `json:"parameters"`
 }
 
 func (h Jobs) Create(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +56,10 @@ func (h Jobs) Create(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusNotFound, "SCOPE_NOT_FOUND", "scope was not found in this organization")
 		return
 	}
+	if err := h.Store.ValidateJobContext(r.Context(), org, input.AssetID, input.ServiceID, input.DiagnosticRunID, input.VantagePointID, input.AgentID); err != nil {
+		middleware.WriteError(w, r, http.StatusBadRequest, "JOB_CONTEXT_INVALID", "asset, service, diagnostic run or agent is not valid for this organization")
+		return
+	}
 	now := time.Now().UTC()
 	decision, err := h.Guard.Authorize(r.Context(), scanguard.Request{OrganizationID: org, UserID: user, AgentID: input.AgentID, Scope: scope, Adapter: adapter, Parameters: input.Parameters, Now: now, MaxConcurrent: h.MaxConcurrent})
 	if err != nil {
@@ -67,7 +75,7 @@ func (h Jobs) Create(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusInternalServerError, "JOB_ID_FAILED", "job identity could not be generated")
 		return
 	}
-	job := domain.AnalysisJob{ID: jobID, OrganizationID: org, ModuleID: input.ModuleID, AssetID: input.AssetID, ScopeID: input.ScopeID, AgentID: input.AgentID, RequestedBy: user, Parameters: input.Parameters, RiskClass: adapter.Definition.RiskClass, Status: domain.JobQueued, CreatedAt: now, TimeoutAt: decision.TimeoutAt}
+	job := domain.AnalysisJob{ID: jobID, OrganizationID: org, ModuleID: input.ModuleID, AssetID: input.AssetID, ServiceID: input.ServiceID, DiagnosticRunID: input.DiagnosticRunID, VantagePointID: input.VantagePointID, ScopeID: input.ScopeID, AgentID: input.AgentID, RequestedBy: user, Parameters: input.Parameters, RiskClass: adapter.Definition.RiskClass, Status: domain.JobQueued, CreatedAt: now, TimeoutAt: decision.TimeoutAt}
 	if err := h.Store.CreateAuthorized(r.Context(), job, decision.NormalizedTarget); err != nil {
 		middleware.WriteError(w, r, http.StatusInternalServerError, "JOB_CREATE_FAILED", "the job could not be created")
 		return

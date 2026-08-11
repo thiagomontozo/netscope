@@ -14,6 +14,9 @@ type Candidate struct {
 	Eligible           bool
 	Confidence         domain.Confidence
 	Reasons            []string
+	Inputs             []string
+	Rules              []string
+	EvidenceIDs        []domain.ID
 	CompromiseAsserted bool
 }
 
@@ -36,5 +39,18 @@ func Correlate(input Input) Candidate {
 			confidence = domain.ConfidenceHigh
 		}
 	}
-	return Candidate{Eligible: len(reasons) > 0, Confidence: confidence, Reasons: reasons, CompromiseAsserted: false}
+	inputs := []string{"asset:" + string(input.Asset.ID)}
+	if input.ServiceObservation != nil {
+		inputs = append(inputs, "service-observation:"+string(input.ServiceObservation.ID))
+	}
+	if input.VulnerabilityID != nil {
+		inputs = append(inputs, "vulnerability:"+string(*input.VulnerabilityID))
+	}
+	if input.ExposureObservation != nil {
+		inputs = append(inputs, "exposure-observation:"+string(input.ExposureObservation.ID))
+	}
+	if input.IDSObservation != nil {
+		inputs = append(inputs, "ids-observation:"+string(input.IDSObservation.ID))
+	}
+	return Candidate{Eligible: len(reasons) > 0, Confidence: confidence, Reasons: reasons, Inputs: inputs, Rules: []string{"Correlate only organization-scoped records with matching asset/service context.", "Treat known exploitation and public exposure as priority context, not proof of compromise.", "Preserve inconclusive outcomes when observations conflict."}, CompromiseAsserted: false}
 }

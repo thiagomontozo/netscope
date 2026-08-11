@@ -27,10 +27,16 @@ type Config struct {
 	S3SecretKey            string
 	NVDAPIKey              string
 	CISAKEVCatalogURL      string
+	AgentHeartbeatSeconds  int
+	AgentDegradedMisses    int
+	AgentOfflineMisses     int
 }
 
 func Load() (Config, error) {
-	c := Config{Environment: env("NETSCOPE_ENV", "development"), Address: env("NETSCOPE_ADDRESS", ":8080"), DatabaseURL: os.Getenv("NETSCOPE_DATABASE_URL"), StoragePath: env("NETSCOPE_STORAGE_PATH", "./storage"), MasterKey: os.Getenv("NETSCOPE_MASTER_KEY"), SessionTTL: 12 * time.Hour, MaxConcurrentJobs: intEnv("NETSCOPE_MAX_CONCURRENT_JOBS", 8), TLSCertificateFile: os.Getenv("NETSCOPE_TLS_CERT_FILE"), TLSKeyFile: os.Getenv("NETSCOPE_TLS_KEY_FILE"), AgentCACertificateFile: os.Getenv("NETSCOPE_AGENT_CA_CERT_FILE"), AgentCAKeyFile: os.Getenv("NETSCOPE_AGENT_CA_KEY_FILE"), StorageDriver: env("NETSCOPE_STORAGE_DRIVER", "local"), S3Endpoint: os.Getenv("NETSCOPE_S3_ENDPOINT"), S3Bucket: os.Getenv("NETSCOPE_S3_BUCKET"), S3Region: os.Getenv("NETSCOPE_S3_REGION"), S3AccessKey: os.Getenv("NETSCOPE_S3_ACCESS_KEY"), S3SecretKey: os.Getenv("NETSCOPE_S3_SECRET_KEY"), NVDAPIKey: os.Getenv("NETSCOPE_NVD_API_KEY"), CISAKEVCatalogURL: os.Getenv("NETSCOPE_CISA_KEV_URL")}
+	c := Config{Environment: env("NETSCOPE_ENV", "development"), Address: env("NETSCOPE_ADDRESS", ":8080"), DatabaseURL: os.Getenv("NETSCOPE_DATABASE_URL"), StoragePath: env("NETSCOPE_STORAGE_PATH", "./storage"), MasterKey: os.Getenv("NETSCOPE_MASTER_KEY"), SessionTTL: 12 * time.Hour, MaxConcurrentJobs: intEnv("NETSCOPE_MAX_CONCURRENT_JOBS", 8), TLSCertificateFile: os.Getenv("NETSCOPE_TLS_CERT_FILE"), TLSKeyFile: os.Getenv("NETSCOPE_TLS_KEY_FILE"), AgentCACertificateFile: os.Getenv("NETSCOPE_AGENT_CA_CERT_FILE"), AgentCAKeyFile: os.Getenv("NETSCOPE_AGENT_CA_KEY_FILE"), StorageDriver: env("NETSCOPE_STORAGE_DRIVER", "local"), S3Endpoint: os.Getenv("NETSCOPE_S3_ENDPOINT"), S3Bucket: os.Getenv("NETSCOPE_S3_BUCKET"), S3Region: os.Getenv("NETSCOPE_S3_REGION"), S3AccessKey: os.Getenv("NETSCOPE_S3_ACCESS_KEY"), S3SecretKey: os.Getenv("NETSCOPE_S3_SECRET_KEY"), NVDAPIKey: os.Getenv("NETSCOPE_NVD_API_KEY"), CISAKEVCatalogURL: os.Getenv("NETSCOPE_CISA_KEV_URL"), AgentHeartbeatSeconds: intEnv("NETSCOPE_AGENT_HEARTBEAT_SECONDS", 30), AgentDegradedMisses: intEnv("NETSCOPE_AGENT_DEGRADED_MISSES", 3), AgentOfflineMisses: intEnv("NETSCOPE_AGENT_OFFLINE_MISSES", 6)}
+	if c.AgentOfflineMisses <= c.AgentDegradedMisses {
+		return Config{}, errors.New("agent offline threshold must exceed degraded threshold")
+	}
 	if c.DatabaseURL == "" {
 		return Config{}, errors.New("NETSCOPE_DATABASE_URL is required")
 	}

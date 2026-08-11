@@ -31,11 +31,15 @@ type ScopeInput struct {
 	Notes            string    `json:"notes"`
 }
 type ScheduleInput struct {
-	ModuleID         string    `json:"moduleId"`
-	ScopeID          domain.ID `json:"scopeId"`
-	AgentID          domain.ID `json:"agentId"`
-	FrequencySeconds int       `json:"frequencySeconds"`
-	Enabled          bool      `json:"enabled"`
+	ModuleID         string          `json:"moduleId"`
+	ScopeID          domain.ID       `json:"scopeId"`
+	AgentID          domain.ID       `json:"agentId"`
+	AssetID          domain.ID       `json:"assetId"`
+	ServiceID        *domain.ID      `json:"serviceId"`
+	VantagePointID   *domain.ID      `json:"vantagePointId"`
+	Parameters       json.RawMessage `json:"parameters"`
+	FrequencySeconds int             `json:"frequencySeconds"`
+	Enabled          bool            `json:"enabled"`
 }
 type UserInput struct {
 	Name         string    `json:"name"`
@@ -96,7 +100,7 @@ func (c Commands) SetFindingStatus(ctx context.Context, org, user, id domain.ID,
 }
 func (c Commands) CreateSchedule(ctx context.Context, org, user domain.ID, in ScheduleInput, requestID string) (domain.ID, error) {
 	var id domain.ID
-	err := c.Pool.QueryRow(ctx, `WITH created AS (INSERT INTO schedules(organization_id,module_id,scope_id,agent_id,frequency_seconds,enabled,next_run_at,created_by) SELECT $1,$2,s.id,a.id,$5,$6,now()+make_interval(secs=>$5),$7 FROM authorized_scopes s JOIN agents a ON a.organization_id=s.organization_id WHERE s.organization_id=$1 AND s.id=$3 AND s.status IN ('VERIFIED','APPROVED') AND now()>=s.valid_from AND now()<s.valid_until AND a.id=$4 AND a.status IN ('ONLINE','DEGRADED') RETURNING id) INSERT INTO audit_events(organization_id,actor_user_id,event_type,resource_type,resource_id,request_id,outcome) SELECT $1,$7,'schedule.created','schedule',id::text,$8,'success' FROM created RETURNING resource_id`, org, in.ModuleID, in.ScopeID, in.AgentID, in.FrequencySeconds, in.Enabled, user, requestID).Scan(&id)
+	err := c.Pool.QueryRow(ctx, `WITH created AS (INSERT INTO schedules(organization_id,module_id,scope_id,agent_id,asset_id,service_id,vantage_point_id,parameters,frequency_seconds,enabled,next_run_at,created_by) SELECT $1,$2,s.id,a.id,asset.id,service.id,vantage.id,$8,$9,$10,now()+make_interval(secs=>$9),$11 FROM authorized_scopes s JOIN agents a ON a.organization_id=s.organization_id JOIN assets asset ON asset.organization_id=s.organization_id AND asset.id=$5 LEFT JOIN network_services service ON service.organization_id=s.organization_id AND service.asset_id=asset.id AND service.id=$6 LEFT JOIN vantage_points vantage ON vantage.organization_id=s.organization_id AND vantage.active AND vantage.id=$7 WHERE s.organization_id=$1 AND s.id=$3 AND s.status IN ('VERIFIED','APPROVED') AND now()>=s.valid_from AND now()<s.valid_until AND a.id=$4 AND a.status IN ('ONLINE','DEGRADED') AND ($6::uuid IS NULL OR service.id IS NOT NULL) AND ($7::uuid IS NULL OR (vantage.id IS NOT NULL AND (vantage.agent_id IS NULL OR vantage.agent_id=a.id))) RETURNING id) INSERT INTO audit_events(organization_id,actor_user_id,event_type,resource_type,resource_id,request_id,outcome) SELECT $1,$11,'schedule.created','schedule',id::text,$12,'success' FROM created RETURNING resource_id`, org, in.ModuleID, in.ScopeID, in.AgentID, in.AssetID, in.ServiceID, in.VantagePointID, in.Parameters, in.FrequencySeconds, in.Enabled, user, requestID).Scan(&id)
 	return id, err
 }
 func (c Commands) SetScheduleEnabled(ctx context.Context, org, user, id domain.ID, enabled bool, requestID string) error {
@@ -120,7 +124,7 @@ func (c Commands) SetModuleEnabled(ctx context.Context, org, user domain.ID, mod
 	return c.audit(ctx, org, user, map[bool]string{true: "module.enabled", false: "module.disabled"}[enabled], "module", domain.ID(moduleID), requestID, "success", nil)
 }
 func (c Commands) CancelJob(ctx context.Context, org, user, id domain.ID, requestID string) error {
-	tag, err := c.Pool.Exec(ctx, `UPDATE analysis_jobs SET status='CANCELLED',completed_at=now(),status_version=status_version+1 WHERE organization_id=$1 AND id=$2 AND status IN ('PENDING','QUEUED','ASSIGNED','RUNNING')`, org, id)
+	tag, err := c.Pool.Exec(ctx, `WITH requested AS (INSERT INTO job_cancellation_requests(job_id,organization_id,requested_by,reason) SELECT id,$1,$3,'cancelled by authorized operator' FROM analysis_jobs WHERE organization_id=$1 AND id=$2 AND status IN ('ASSIGNED','RUNNING') ON CONFLICT(job_id) DO NOTHING) UPDATE analysis_jobs SET status='CANCELLED',completed_at=now(),status_version=status_version+1 WHERE organization_id=$1 AND id=$2 AND status IN ('PENDING','QUEUED','ASSIGNED','RUNNING')`, org, id, user)
 	if err != nil {
 		return err
 	}

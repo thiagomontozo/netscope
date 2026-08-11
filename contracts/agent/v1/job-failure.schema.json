@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://netscope.dev/contracts/agent/v1/job-failure.schema.json","title":"Job Failure v1","type":"object","additionalProperties":false,
+  "required":["protocolVersion","jobId","agentId","code","summary","occurredAt","retryable"],
+  "properties":{"protocolVersion":{"const":"1.0"},"jobId":{"type":"string","format":"uuid"},"agentId":{"type":"string","format":"uuid"},"code":{"type":"string","enum":["MODULE_UNAVAILABLE","TOOL_NOT_FOUND","CAPABILITY_MISSING","INVALID_JOB","JOB_EXPIRED","TARGET_REJECTED","TIMEOUT","PROCESS_FAILED","OUTPUT_LIMIT_EXCEEDED","ARTIFACT_ERROR","CANCELLED","PROTOCOL_INCOMPATIBLE","SIGNATURE_INVALID","INTERNAL_ERROR"]},"summary":{"type":"string","minLength":1,"maxLength":2000},"occurredAt":{"type":"string","format":"date-time"},"retryable":{"type":"boolean"}}
+}

@@ -1,0 +1,4 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://netscope.dev/contracts/agent/v1/errors.schema.json","title":"Agent API Error v1","type":"object","additionalProperties":false,"required":["error"],
+  "properties":{"error":{"type":"object","additionalProperties":false,"required":["code","message","requestId"],"properties":{"code":{"type":"string","pattern":"^[A-Z][A-Z0-9_]{2,100}$"},"message":{"type":"string","minLength":1,"maxLength":2000},"requestId":{"type":"string","minLength":1,"maxLength":100}}}}
+}

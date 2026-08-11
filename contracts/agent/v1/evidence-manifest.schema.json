@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://netscope.dev/contracts/agent/v1/evidence-manifest.schema.json","title":"Evidence Manifest Item v1","type":"object","additionalProperties":false,
+  "required":["evidenceId","source","contentType","summary","structuredData","sha256","sizeBytes","artifactKind"],
+  "properties":{"evidenceId":{"type":"string","format":"uuid"},"source":{"type":"string","minLength":1,"maxLength":200},"contentType":{"type":"string","minLength":1,"maxLength":200},"summary":{"type":"string","minLength":1,"maxLength":4000},"structuredData":{"type":"object"},"sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},"sizeBytes":{"type":"integer","minimum":0},"artifactKind":{"type":"string","enum":["STRUCTURED_RESULT","RAW_OUTPUT","PCAP_ARTIFACT","TLS_METADATA","DNS_RESPONSE","ROUTE_HOPS","HTTP_TRANSACTION","NMAP_RESULT","ZEEK_EVENT","SURICATA_EVENT","VULNERABILITY_EVIDENCE"]}}
+}

@@ -23,7 +23,7 @@ func (s ControlPlane) ValidateSession(ctx context.Context, tokenHash string) (do
 }
 func (s ControlPlane) ValidateAgentFingerprint(ctx context.Context, fingerprint string) (domain.ID, domain.ID, error) {
 	var org, agent domain.ID
-	err := s.Pool.QueryRow(ctx, `SELECT organization_id::text,id::text FROM agents WHERE identity_fingerprint=$1 AND status IN ('ONLINE','DEGRADED') AND (certificate_expires_at IS NULL OR certificate_expires_at>now())`, fingerprint).Scan(&org, &agent)
+	err := s.Pool.QueryRow(ctx, `SELECT organization_id::text,id::text FROM agents WHERE identity_fingerprint=$1 AND status IN ('ONLINE','DEGRADED','OFFLINE') AND (certificate_expires_at IS NULL OR certificate_expires_at>now())`, fingerprint).Scan(&org, &agent)
 	return org, agent, err
 }
 func (s ControlPlane) GetForOrganization(ctx context.Context, organizationID, scopeID domain.ID) (domain.AuthorizedScope, error) {
@@ -85,7 +85,18 @@ func (s ControlPlane) CreateAuthorized(ctx context.Context, job domain.AnalysisJ
 	if job.OrganizationID == "" || job.ScopeID == "" || job.AgentID == "" {
 		return errors.New("job identity context is incomplete")
 	}
-	_, err := s.Pool.Exec(ctx, `INSERT INTO analysis_jobs(id,organization_id,module_id,asset_id,scope_id,agent_id,requested_by,parameters,normalized_target,risk_class,status,created_at,queued_at,timeout_at) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,$10,$11,$12,$12,$13)`, job.ID, job.OrganizationID, job.ModuleID, job.AssetID, job.ScopeID, job.AgentID, job.RequestedBy, job.Parameters, normalizedTarget, job.RiskClass, job.Status, job.CreatedAt, job.TimeoutAt)
+	_, err := s.Pool.Exec(ctx, `INSERT INTO analysis_jobs(id,organization_id,module_id,asset_id,service_id,diagnostic_run_id,vantage_point_id,scope_id,agent_id,requested_by,parameters,normalized_target,risk_class,status,created_at,queued_at,timeout_at,protocol_version,authorization_reference) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15,$16,$17,'scope:'||$8::text||':job:'||$1::text)`, job.ID, job.OrganizationID, job.ModuleID, job.AssetID, job.ServiceID, job.DiagnosticRunID, job.VantagePointID, job.ScopeID, job.AgentID, job.RequestedBy, job.Parameters, normalizedTarget, job.RiskClass, job.Status, job.CreatedAt, job.TimeoutAt, domain.AgentProtocolVersion)
 	return err
+}
+func (s ControlPlane) ValidateJobContext(ctx context.Context, organizationID, assetID domain.ID, serviceID, diagnosticRunID, vantagePointID *domain.ID, agentID domain.ID) error {
+	var valid bool
+	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM assets a JOIN agents ag ON ag.organization_id=a.organization_id WHERE a.organization_id=$1 AND a.id=$2 AND ag.id=$3 AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM network_services ns WHERE ns.organization_id=$1 AND ns.id=$4 AND ns.asset_id=a.id)) AND ($5::uuid IS NULL OR EXISTS(SELECT 1 FROM diagnostic_runs dr WHERE dr.organization_id=$1 AND dr.id=$5 AND dr.asset_id=a.id AND (dr.service_id IS NULL OR dr.service_id=$4))) AND ($6::uuid IS NULL OR EXISTS(SELECT 1 FROM vantage_points vp WHERE vp.organization_id=$1 AND vp.id=$6 AND vp.active AND (vp.agent_id IS NULL OR vp.agent_id=$3))))`, organizationID, assetID, agentID, serviceID, diagnosticRunID, vantagePointID).Scan(&valid)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return errors.New("job context does not belong to organization")
+	}
+	return nil
 }
 func IsNotFound(err error) bool { return errors.Is(err, pgx.ErrNoRows) }

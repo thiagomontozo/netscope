@@ -113,6 +113,21 @@ func main() {
 		}
 	}()
 	go func() {
+		ticker := time.NewTicker(time.Duration(cfg.AgentHeartbeatSeconds) * time.Second)
+		defer ticker.Stop()
+		policy := agents.PresencePolicy{HeartbeatIntervalSeconds: cfg.AgentHeartbeatSeconds, DegradedAfterMisses: cfg.AgentDegradedMisses, OfflineAfterMisses: cfg.AgentOfflineMisses}
+		for {
+			select {
+			case <-shutdown.Done():
+				return
+			case <-ticker.C:
+				if err := agents.UpdatePresence(shutdown, pool, policy); err != nil {
+					logger.Error("agent presence cycle failed", "error", err)
+				}
+			}
+		}
+	}()
+	go func() {
 		logger.Info("NetScope API listening", "address", cfg.Address, "environment", cfg.Environment)
 		var serveErr error
 		if cfg.TLSCertificateFile != "" {

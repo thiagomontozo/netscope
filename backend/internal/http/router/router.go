@@ -49,6 +49,16 @@ func New(logger *slog.Logger, registry *modules.Registry, runtime Runtime) http.
 		jobHandler := handlers.Jobs{Registry: registry, Guard: scanguard.Guard{Permissions: runtime.Store, Agents: runtime.Store, Policies: runtime.Store}, Scopes: runtime.Store, Store: runtime.Store, MaxConcurrent: runtime.MaxConcurrent}
 		api.Post("/jobs", jobHandler.Create)
 		management := handlers.Management{Commands: database.Commands{Pool: runtime.Store.Pool}, Policy: runtime.Store, Registry: registry}
+		investigations := handlers.Investigations{Pool: runtime.Store.Pool, Policy: runtime.Store}
+		api.Post("/vantage-points", investigations.CreateVantagePoint)
+		api.Post("/services", investigations.CreateService)
+		api.Post("/diagnostic-runs", investigations.CreateDiagnosticRun)
+		api.Post("/incidents", investigations.CreateIncident)
+		api.Get("/incidents/{id}/workspace", investigations.IncidentWorkspace)
+		api.Post("/incidents/{id}/events", investigations.AddIncidentEvent)
+		api.Post("/incidents/{id}/links", investigations.AttachIncidentLink)
+		api.Post("/incidents/{id}/evidence", investigations.AttachIncidentEvidence)
+		api.Post("/incidents/{id}/evidence-report", investigations.CreateIncidentEvidenceReport)
 		api.Post("/assets", management.CreateAsset)
 		api.Put("/assets/{id}", management.UpdateAsset)
 		api.Delete("/assets/{id}", management.DeleteAsset)
@@ -79,7 +89,7 @@ func New(logger *slog.Logger, registry *modules.Registry, runtime Runtime) http.
 		enrichmentHandler := handlers.Enrichment{Pool: runtime.Store.Pool, NVD: runtime.NVD, KEV: runtime.KEV, Policy: runtime.Store}
 		api.Post("/vulnerabilities/{id}/enrich", enrichmentHandler.Run)
 		resources := database.Resources{Pool: runtime.Store.Pool}
-		for _, resource := range []string{"users", "roles", "permissions", "assets", "scopes", "agents", "jobs", "schedules", "observations", "findings", "evidence", "vulnerabilities", "traffic", "pcap", "reports", "notifications", "audit"} {
+		for _, resource := range []string{"users", "roles", "permissions", "assets", "services", "public-exposure", "scopes", "agents", "vantage-points", "jobs", "diagnostic-runs", "schedules", "observations", "findings", "evidence", "incidents", "incident-events", "incident-reports", "route-snapshots", "route-comparisons", "monitor-history", "baselines", "changes", "vulnerabilities", "traffic", "pcap", "reports", "notifications", "audit"} {
 			path := "/" + resource
 			handler := handlers.Resources{Store: resources, Resource: resource, Policy: runtime.Store}
 			api.Get(path, handler.List)
@@ -93,11 +103,14 @@ func New(logger *slog.Logger, registry *modules.Registry, runtime Runtime) http.
 		agent.Use(appmw.AgentIdentity(runtime.Store))
 		h := agentHandler
 		agent.Post("/heartbeat", h.Heartbeat)
+		agent.Post("/capabilities", h.Capabilities)
+		agent.Post("/evidence", h.Evidence)
 		agent.MethodFunc(http.MethodGet, "/jobs/next", h.NextJob)
 		agent.MethodFunc(http.MethodPost, "/jobs/next", h.NextJob)
 		agent.Post("/jobs/{id}/start", h.StartJob)
 		agent.Post("/jobs/{id}/result", h.Result)
 		agent.Post("/jobs/{id}/fail", h.Fail)
+		agent.Get("/jobs/{id}/cancellation", h.Cancellation)
 	})
 	return r
 }

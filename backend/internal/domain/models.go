@@ -108,17 +108,21 @@ const (
 )
 
 type ModuleDefinition struct {
-	ID                    string             `json:"id"`
-	Name                  string             `json:"name"`
-	Version               string             `json:"version"`
-	Category              string             `json:"category"`
-	RiskClass             RiskClass          `json:"riskClass"`
-	SupportedEnvironments []ScopeEnvironment `json:"supportedEnvironments"`
-	RequiredCapabilities  []string           `json:"requiredCapabilities"`
-	DefaultTimeout        time.Duration      `json:"defaultTimeout"`
-	InputSchema           json.RawMessage    `json:"inputSchema"`
-	ResultSchema          json.RawMessage    `json:"resultSchema"`
-	Enabled               bool               `json:"enabled"`
+	ID                     string             `json:"id"`
+	Name                   string             `json:"name"`
+	Version                string             `json:"version"`
+	Category               string             `json:"category"`
+	RiskClass              RiskClass          `json:"riskClass"`
+	ProtocolVersion        string             `json:"protocolVersion"`
+	SupportedEnvironments  []ScopeEnvironment `json:"supportedEnvironments"`
+	SupportedPlatforms     []string           `json:"supportedPlatforms"`
+	RequiredCapabilities   []string           `json:"requiredCapabilities"`
+	DefaultTimeout         time.Duration      `json:"defaultTimeout"`
+	ParameterSchemaVersion string             `json:"parameterSchemaVersion"`
+	ResultSchemaVersion    string             `json:"resultSchemaVersion"`
+	InputSchema            json.RawMessage    `json:"inputSchema"`
+	ResultSchema           json.RawMessage    `json:"resultSchema"`
+	Enabled                bool               `json:"enabled"`
 }
 
 type JobStatus string
@@ -136,21 +140,24 @@ const (
 )
 
 type AnalysisJob struct {
-	ID             ID              `json:"id"`
-	OrganizationID ID              `json:"organizationId"`
-	ModuleID       string          `json:"moduleId"`
-	AssetID        ID              `json:"assetId"`
-	ScopeID        ID              `json:"scopeId"`
-	AgentID        ID              `json:"agentId"`
-	RequestedBy    ID              `json:"requestedBy"`
-	Parameters     json.RawMessage `json:"parameters"`
-	RiskClass      RiskClass       `json:"riskClass"`
-	Status         JobStatus       `json:"status"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	QueuedAt       *time.Time      `json:"queuedAt"`
-	StartedAt      *time.Time      `json:"startedAt"`
-	CompletedAt    *time.Time      `json:"completedAt"`
-	TimeoutAt      time.Time       `json:"timeoutAt"`
+	ID              ID              `json:"id"`
+	OrganizationID  ID              `json:"organizationId"`
+	ModuleID        string          `json:"moduleId"`
+	AssetID         ID              `json:"assetId"`
+	ServiceID       *ID             `json:"serviceId,omitempty"`
+	DiagnosticRunID *ID             `json:"diagnosticRunId,omitempty"`
+	VantagePointID  *ID             `json:"vantagePointId,omitempty"`
+	ScopeID         ID              `json:"scopeId"`
+	AgentID         ID              `json:"agentId"`
+	RequestedBy     ID              `json:"requestedBy"`
+	Parameters      json.RawMessage `json:"parameters"`
+	RiskClass       RiskClass       `json:"riskClass"`
+	Status          JobStatus       `json:"status"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	QueuedAt        *time.Time      `json:"queuedAt"`
+	StartedAt       *time.Time      `json:"startedAt"`
+	CompletedAt     *time.Time      `json:"completedAt"`
+	TimeoutAt       time.Time       `json:"timeoutAt"`
 }
 
 type Observation struct {
@@ -202,37 +209,30 @@ type Evidence struct {
 	StorageKey     string          `json:"storageKey,omitempty"`
 	StructuredData json.RawMessage `json:"structuredData,omitempty"`
 	Checksum       string          `json:"checksum,omitempty"`
+	ModuleID       string          `json:"moduleId"`
+	AgentID        *ID             `json:"agentId,omitempty"`
+	VantagePointID *ID             `json:"vantagePointId,omitempty"`
+	ArtifactKind   string          `json:"artifactKind,omitempty"`
+	SizeBytes      *int64          `json:"sizeBytes,omitempty"`
+	ObservedAt     *time.Time      `json:"observedAt,omitempty"`
 	CreatedAt      time.Time       `json:"createdAt"`
 }
 
 type Agent struct {
-	ID             ID                `json:"id"`
-	OrganizationID ID                `json:"organizationId"`
-	Name           string            `json:"name"`
-	Hostname       string            `json:"hostname"`
-	OS             string            `json:"os"`
-	Arch           string            `json:"arch"`
-	Version        string            `json:"version"`
-	Status         string            `json:"status"`
-	LastSeenAt     *time.Time        `json:"lastSeenAt"`
-	RegisteredAt   time.Time         `json:"registeredAt"`
-	Capabilities   []string          `json:"capabilities"`
-	Labels         map[string]string `json:"labels"`
-	NetworkZone    string            `json:"networkZone"`
-	Fingerprint    string            `json:"fingerprint"`
-}
-
-type JobEnvelope struct {
-	JobID           ID              `json:"jobId"`
-	ModuleID        string          `json:"moduleId"`
-	ScopeID         ID              `json:"scopeId"`
-	TargetReference string          `json:"targetReference"`
-	Parameters      json.RawMessage `json:"validatedParameters"`
-	IssuedAt        time.Time       `json:"issuedAt"`
-	ExpiresAt       time.Time       `json:"expiresAt"`
-	OrganizationID  ID              `json:"organizationId"`
-	AgentID         ID              `json:"agentId"`
-	Nonce           string          `json:"nonce"`
-	RiskClass       RiskClass       `json:"riskClass"`
-	Signature       string          `json:"signature,omitempty"`
+	ID                  ID                `json:"id"`
+	OrganizationID      ID                `json:"organizationId"`
+	Name                string            `json:"name"`
+	Hostname            string            `json:"hostname"`
+	OS                  string            `json:"os"`
+	Arch                string            `json:"arch"`
+	Version             string            `json:"version"`
+	Status              string            `json:"status"`
+	LastSeenAt          *time.Time        `json:"lastSeenAt"`
+	RegisteredAt        time.Time         `json:"registeredAt"`
+	Capabilities        []string          `json:"capabilities"`
+	Labels              map[string]string `json:"labels"`
+	NetworkZone         string            `json:"networkZone"`
+	Fingerprint         string            `json:"fingerprint"`
+	ProtocolVersion     string            `json:"protocolVersion"`
+	CompatibilityStatus string            `json:"compatibilityStatus"`
 }

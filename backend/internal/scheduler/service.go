@@ -18,14 +18,16 @@ type Service struct {
 	MaxConcurrent int
 }
 type dueSchedule struct {
-	id, org            domain.ID
-	module             string
-	scope, agent, user domain.ID
-	frequency          int
+	id, org                   domain.ID
+	module                    string
+	scope, agent, user, asset domain.ID
+	service, vantage          *domain.ID
+	parameters                json.RawMessage
+	frequency                 int
 }
 
 func (s Service) RunOnce(ctx context.Context) error {
-	rows, err := s.Pool.Query(ctx, `SELECT id::text,organization_id::text,module_id,scope_id::text,agent_id::text,created_by::text,frequency_seconds FROM schedules WHERE enabled AND next_run_at<=now() ORDER BY next_run_at LIMIT 50`)
+	rows, err := s.Pool.Query(ctx, `SELECT id::text,organization_id::text,module_id,scope_id::text,agent_id::text,created_by::text,asset_id::text,service_id::text,vantage_point_id::text,parameters,frequency_seconds FROM schedules WHERE enabled AND asset_id IS NOT NULL AND next_run_at<=now() ORDER BY next_run_at LIMIT 50`)
 	if err != nil {
 		return err
 	}
@@ -33,7 +35,7 @@ func (s Service) RunOnce(ctx context.Context) error {
 	items := []dueSchedule{}
 	for rows.Next() {
 		var item dueSchedule
-		if err = rows.Scan(&item.id, &item.org, &item.module, &item.scope, &item.agent, &item.user, &item.frequency); err != nil {
+		if err = rows.Scan(&item.id, &item.org, &item.module, &item.scope, &item.agent, &item.user, &item.asset, &item.service, &item.vantage, &item.parameters, &item.frequency); err != nil {
 			return err
 		}
 		items = append(items, item)
@@ -53,7 +55,7 @@ func (s Service) RunOnce(ctx context.Context) error {
 			s.reject(ctx, item, "SCOPE_NOT_FOUND")
 			continue
 		}
-		parameters := json.RawMessage(`{}`)
+		parameters := item.parameters
 		decision, decisionErr := guard.Authorize(ctx, scanguard.Request{OrganizationID: item.org, UserID: item.user, AgentID: item.agent, Scope: scope, Adapter: adapter, Parameters: parameters, Now: time.Now().UTC(), MaxConcurrent: s.MaxConcurrent})
 		if decisionErr != nil {
 			s.reject(ctx, item, "POLICY_ERROR")
@@ -63,12 +65,16 @@ func (s Service) RunOnce(ctx context.Context) error {
 			s.reject(ctx, item, decision.Code)
 			continue
 		}
+		if contextErr := s.Store.ValidateJobContext(ctx, item.org, item.asset, item.service, nil, item.vantage, item.agent); contextErr != nil {
+			s.reject(ctx, item, "JOB_CONTEXT_INVALID")
+			continue
+		}
 		jobID, idErr := domain.NewID()
 		if idErr != nil {
 			return idErr
 		}
 		now := time.Now().UTC()
-		job := domain.AnalysisJob{ID: jobID, OrganizationID: item.org, ModuleID: item.module, ScopeID: item.scope, AgentID: item.agent, RequestedBy: item.user, Parameters: parameters, RiskClass: adapter.Definition.RiskClass, Status: domain.JobQueued, CreatedAt: now, TimeoutAt: decision.TimeoutAt}
+		job := domain.AnalysisJob{ID: jobID, OrganizationID: item.org, ModuleID: item.module, AssetID: item.asset, ServiceID: item.service, VantagePointID: item.vantage, ScopeID: item.scope, AgentID: item.agent, RequestedBy: item.user, Parameters: parameters, RiskClass: adapter.Definition.RiskClass, Status: domain.JobQueued, CreatedAt: now, TimeoutAt: decision.TimeoutAt}
 		if err = s.Store.CreateAuthorized(ctx, job, decision.NormalizedTarget); err != nil {
 			continue
 		}

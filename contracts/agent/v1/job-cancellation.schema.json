@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://netscope.dev/contracts/agent/v1/job-cancellation.schema.json","title":"Job Cancellation Status v1","type":"object","additionalProperties":false,
+  "required":["protocolVersion","jobId","cancellationRequested","jobStatus"],
+  "properties":{"protocolVersion":{"const":"1.0"},"jobId":{"type":"string","format":"uuid"},"cancellationRequested":{"type":"boolean"},"requestedAt":{"type":["string","null"],"format":"date-time"},"jobStatus":{"type":"string","enum":["ASSIGNED","RUNNING","CANCELLED","SUCCEEDED","FAILED","TIMED_OUT"]}}
+}

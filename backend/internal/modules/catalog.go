@@ -10,7 +10,7 @@ func BuiltinDefinitions() []Adapter {
 	all := []domain.ScopeEnvironment{domain.EnvironmentInternal, domain.EnvironmentPublic}
 	passive := []domain.ScopeEnvironment{domain.EnvironmentInternal, domain.EnvironmentPublic}
 	definition := func(id, name, category string, risk domain.RiskClass, capability string, timeout time.Duration) domain.ModuleDefinition {
-		return domain.ModuleDefinition{ID: id, Name: name, Version: "0.1.0", Category: category, RiskClass: risk, SupportedEnvironments: all, RequiredCapabilities: []string{capability}, DefaultTimeout: timeout, InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`), ResultSchema: json.RawMessage(`{"type":"object"}`), Enabled: true}
+		return domain.ModuleDefinition{ID: id, Name: name, Version: "0.1.0", Category: category, RiskClass: risk, ProtocolVersion: domain.AgentProtocolVersion, SupportedEnvironments: all, SupportedPlatforms: []string{"linux", "windows", "darwin"}, RequiredCapabilities: []string{capability}, DefaultTimeout: timeout, ParameterSchemaVersion: "1.0", ResultSchemaVersion: "1.0", InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`), ResultSchema: json.RawMessage(`{"type":"object"}`), Enabled: true}
 	}
 	adapters := []Adapter{
 		{Definition: definition("network.ping", "Ping", "diagnostics", domain.RiskSafeActive, "ping", 30*time.Second), Validator: NewStrictValidator(map[string]func(any) bool{"samples": NumberRange(1, 10), "timeoutMs": NumberRange(100, 10000)})},
