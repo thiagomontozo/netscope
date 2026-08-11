@@ -76,7 +76,7 @@ The control plane owns organizations, authorization, policies, scopes, agents, m
 
 Agents initiate outbound connections. Enrollment tokens are short-lived and single-use; after enrollment the agent receives its own cryptographic identity. The control plane can revoke and rotate identity, inspect the fingerprint and dispatch only compatible jobs. The agent API is separate at `/agent/v1` and must require strongly verified agent identity.
 
-The agent implementation lives in a separate repository: `thiagomontozo/netscope-agent`.
+The agent implementation lives in a separate repository: `thiagomontozo/netscope-agent`. This control plane implements the complete enrollment contract: a short-lived single-use token authorizes one CSR, the control plane signs a 90-day client certificate with an externally supplied CA, persists its fingerprint, and requires the active certificate for heartbeat, polling, job transitions and result import.
 
 ## Authorized Scope
 
@@ -149,7 +149,7 @@ The workflow is Upload → Private Object Storage → Analysis Job → TShark/Ze
 
 ## Zeek Integration
 
-`traffic.zeek` is a passive adapter boundary for PCAP connection, DNS, HTTP, TLS, SSH and protocol metadata. Live sensor support is planned.
+`traffic.zeek` is a passive module contract for PCAP connection, DNS, HTTP, TLS, SSH and protocol metadata. Execution remains on the separately deployed agent; the control plane imports bounded normalized observations, evidence and vulnerability results transactionally.
 
 ## Suricata Integration
 
@@ -239,7 +239,7 @@ This repository does not ship an agent and does not run a scan from the control-
 
 ## Configuration
 
-Configuration is environment-based. `NETSCOPE_DATABASE_URL` is mandatory. `NETSCOPE_MASTER_KEY` must be at least 32 bytes in production and must not be committed. Local artifact storage defaults to `./storage` and must remain private.
+Configuration is environment-based. `NETSCOPE_DATABASE_URL` is mandatory. `NETSCOPE_MASTER_KEY` must be at least 32 bytes in production and must not be committed. Artifact storage supports private local storage or an HTTPS S3-compatible endpoint using SigV4; credentials come only from the environment or a secret manager.
 
 ## API
 
@@ -259,7 +259,7 @@ See [API](docs/api.md).
 
 ## Docker
 
-`compose.yml` defines PostgreSQL, the Go API, React frontend and private local artifact volume. Scanner tools are intentionally excluded. The compose file requires a database password and supports secret injection through the environment.
+`compose.yml` defines PostgreSQL, the Go API, React frontend and private local artifact volume. `compose.mtls.yml` is the production overlay for a TLS server certificate and agent client-certificate CA. Certificate and key files live under the ignored `certificates/` deployment path and are mounted read-only. Scanner tools are intentionally excluded.
 
 ## Project Structure
 
@@ -271,15 +271,13 @@ deploy/        frontend reverse-proxy configuration
 compose.yml    local deployment topology
 ```
 
-## Limitations
+## Deliberate Boundaries
 
-- Experimental foundation; no production hardening certification.
-- Agent execution is defined but implemented in a separate repository.
-- Repository adapters and full workflows are not complete for every API resource.
-- TOTP enrollment UI, outbound mail and external secret-manager adapters remain to be integrated.
-- Zeek, Suricata, TShark, Greenbone, NVD, KEV, Blackbox and iperf3 are adapter foundations, not bundled runtime integrations.
-- Local storage is the initial implementation; S3/MinIO is planned.
-- Automated tests and CI are planned for v0.2.
+- Current status remains Experimental; production certification requires the intentionally deferred automated test, build and runtime-validation stage.
+- Network tool execution remains in the separate `netscope-agent` repository by design. This repository contains no scanner binary or arbitrary command runner.
+- NATS JetStream and ClickHouse remain optional future transports/stores behind existing boundaries; PostgreSQL and HTTPS polling are the required v0.1 path.
+- Outbound email and enterprise secret-manager products are deployment-specific adapters. TOTP setup, one-time recovery codes, encrypted secrets and logout-all are implemented without requiring them.
+- NVD API 2.0 and CISA KEV HTTP providers are implemented, but external synchronization must be explicitly configured and scheduled by an authorized deployment.
 
 ## Roadmap
 

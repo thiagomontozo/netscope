@@ -8,7 +8,7 @@ NetScope supports diagnostics, monitoring and authorized assessment. It assumes 
 
 Users authenticate with Argon2id-protected passwords and revocable opaque sessions. Privileged roles require TOTP MFA. Session validation must re-check user activity so disabling a user invalidates existing access. MFA values, recovery codes, passwords and session values are never logged.
 
-Agents enroll once with a short-lived, single-use token. Durable access uses mTLS or equivalent cryptographic identity. Revocation, rotation and fingerprint visibility are required. Agent private keys never enter control-plane storage.
+Agents enroll once with a short-lived, single-use token and locally generated CSR. Durable access uses a CA-signed mTLS identity checked against the active database fingerprint. Revocation and fingerprint visibility are enforced. Agent private keys never enter control-plane storage.
 
 ## Authorization
 

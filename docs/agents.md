@@ -8,7 +8,9 @@ An administrator creates a random, short-lived, single-use enrollment token stor
 
 ## Trust lifecycle
 
-After enrollment, mTLS or equivalent identity authenticates heartbeat, job polling and result submission. The control plane records the public fingerprint and can revoke or rotate identity. Revoked agents receive no work and cannot submit state.
+After enrollment, mTLS authenticates heartbeat, job polling and result submission. Enrollment consumes a token atomically, validates a PKCS#10 CSR, signs a 90-day client certificate using the externally mounted agent CA, records its SHA-256 fingerprint and returns only public certificate material. Revoked or expired identities receive no work and cannot submit state.
+
+The production Compose overlay exposes the Go HTTPS listener directly for agents and configures the frontend proxy to verify the backend server CA. Browser routes accept no client certificate; agent routes additionally require a verified and database-active agent fingerprint.
 
 ## Capabilities
 

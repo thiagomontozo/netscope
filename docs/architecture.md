@@ -12,7 +12,7 @@ NetScope is a modular monolith: one Go deployment owns policy and transactional 
 - Knowledge: assets, observations, findings, evidence, vulnerabilities, traffic and correlation.
 - Operations: agents, reports, notifications, retention and audit.
 
-Dependencies point toward the domain. HTTP, pgx, local storage and HTTPS polling are adapters. Small interfaces keep a future NATS JetStream transport or ClickHouse history store from entering core policy decisions.
+Dependencies point toward the domain. HTTP, pgx, local or S3-compatible storage, and HTTPS polling are adapters. Small interfaces keep a future NATS JetStream transport or ClickHouse history store from entering core policy decisions.
 
 ## Data and event flow
 
