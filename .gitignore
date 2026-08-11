@@ -1,0 +1,14 @@
+.env
+data/
+storage/
+pcap/
+node_modules/
+dist/
+*.log
+*.sql.gz
+*.dump
+certificates/
+keys/
+.DS_Store
+coverage/
+frontend/.vite/
