@@ -35,10 +35,11 @@ func (s Service) Login(ctx context.Context, organizationSlug, email, password st
 	if err != nil || !user.Active || !VerifyPassword(password, user.PasswordHash) {
 		return LoginResult{}, ErrInvalidCredentials
 	}
-	if MFARequired(roles, requireOrganizationMFA) {
-		if !mfaEnabled {
-			return LoginResult{}, ErrMFAEnrollmentRequired
-		}
+	required := MFARequired(roles, requireOrganizationMFA)
+	if required && !mfaEnabled {
+		return LoginResult{}, ErrMFAEnrollmentRequired
+	}
+	if mfaEnabled {
 		plain, digest, tokenErr := NewOpaqueToken(32)
 		if tokenErr != nil {
 			return LoginResult{}, tokenErr
@@ -105,6 +106,38 @@ func (s Service) CompleteMFA(ctx context.Context, challenge, code string) (Login
 		return LoginResult{}, err
 	}
 	return LoginResult{UserID: userID, OrganizationID: organizationID, SessionToken: plain}, nil
+}
+
+func (s Service) BeginMFASetup(ctx context.Context, organizationID, userID domain.ID, email string) (MFASetup, error) {
+	setup, hashes, err := NewMFASetup("NetScope", email)
+	if err != nil {
+		return MFASetup{}, err
+	}
+	encrypted, err := EncryptSecret(s.MasterKey, []byte(setup.Secret))
+	if err != nil {
+		return MFASetup{}, err
+	}
+	_, err = s.Pool.Exec(ctx, `INSERT INTO mfa_configurations(organization_id,user_id,encrypted_totp_secret,enabled,recovery_code_hashes) VALUES($1,$2,$3,false,$4) ON CONFLICT(user_id) DO UPDATE SET encrypted_totp_secret=excluded.encrypted_totp_secret,enabled=false,recovery_code_hashes=excluded.recovery_code_hashes,verified_at=NULL`, organizationID, userID, encrypted, hashes)
+	if err != nil {
+		return MFASetup{}, err
+	}
+	return setup, nil
+}
+func (s Service) ConfirmMFASetup(ctx context.Context, organizationID, userID domain.ID, code string) error {
+	var encrypted []byte
+	err := s.Pool.QueryRow(ctx, `SELECT encrypted_totp_secret FROM mfa_configurations WHERE organization_id=$1 AND user_id=$2 AND enabled=false`, organizationID, userID).Scan(&encrypted)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+	secret, err := DecryptSecret(s.MasterKey, encrypted)
+	if err != nil {
+		return err
+	}
+	if !VerifyTOTP(string(secret), code, time.Now().UTC()) {
+		return ErrInvalidCredentials
+	}
+	_, err = s.Pool.Exec(ctx, `UPDATE mfa_configurations SET enabled=true,verified_at=now() WHERE organization_id=$1 AND user_id=$2`, organizationID, userID)
+	return err
 }
 func (s Service) Revoke(ctx context.Context, plain string) error {
 	hash := sha256.Sum256([]byte(plain))

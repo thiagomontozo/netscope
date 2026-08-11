@@ -17,6 +17,7 @@ const (
 	requestIDKey      contextKey = "request-id"
 	organizationIDKey contextKey = "organization-id"
 	userIDKey         contextKey = "user-id"
+	agentIDKey        contextKey = "agent-id"
 )
 
 func RequestID(next http.Handler) http.Handler {
@@ -65,14 +66,35 @@ func UserID(ctx context.Context) domain.ID {
 	value, _ := ctx.Value(userIDKey).(domain.ID)
 	return value
 }
-func AgentIdentity(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 {
-			WriteError(w, r, http.StatusUnauthorized, "AGENT_IDENTITY_REQUIRED", "a verified agent client certificate is required")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+
+type AgentStore interface {
+	ValidateAgentFingerprint(context.Context, string) (domain.ID, domain.ID, error)
+}
+
+func AgentIdentity(store AgentStore) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 {
+				WriteError(w, r, http.StatusUnauthorized, "AGENT_IDENTITY_REQUIRED", "a verified agent client certificate is required")
+				return
+			}
+			certificate := r.TLS.PeerCertificates[0]
+			digest := sha256.Sum256(certificate.Raw)
+			fingerprint := hex.EncodeToString(digest[:])
+			org, agent, err := store.ValidateAgentFingerprint(r.Context(), fingerprint)
+			if err != nil {
+				WriteError(w, r, http.StatusUnauthorized, "AGENT_REVOKED", "agent identity is unknown, expired or revoked")
+				return
+			}
+			ctx := context.WithValue(r.Context(), organizationIDKey, org)
+			ctx = context.WithValue(ctx, agentIDKey, agent)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+func AgentID(ctx context.Context) domain.ID {
+	value, _ := ctx.Value(agentIDKey).(domain.ID)
+	return value
 }
 func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -82,4 +104,13 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 			logger.InfoContext(r.Context(), "http request", "requestId", RequestIDFrom(r.Context()), "method", r.Method, "path", r.URL.Path, "durationMs", time.Since(started).Milliseconds())
 		})
 	}
+}
+func RequireCSRF(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && r.Header.Get("X-NetScope-CSRF") != "1" {
+			WriteError(w, r, http.StatusForbidden, "CSRF_CHECK_FAILED", "the state-changing request is missing the required CSRF header")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

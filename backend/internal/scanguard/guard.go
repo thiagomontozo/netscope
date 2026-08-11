@@ -17,6 +17,7 @@ type AgentChecker interface {
 	Supports(context.Context, domain.ID, domain.ID, []string) (bool, error)
 }
 type PolicyChecker interface {
+	ModuleEnabled(context.Context, domain.ID, string) (bool, error)
 	WithinMaintenanceWindow(context.Context, domain.ID, time.Time) bool
 	AllowRate(context.Context, domain.ID, domain.ID, string) bool
 	ConcurrentJobs(context.Context, domain.ID) (int, error)
@@ -53,7 +54,11 @@ func (g Guard) Authorize(ctx context.Context, req Request) (Decision, error) {
 	if !scopes.Active(req.Scope, req.Now) {
 		return deny("SCOPE_NOT_AUTHORIZED", "scope is not approved and currently valid")
 	}
-	if !req.Adapter.Definition.Enabled {
+	enabled, err := g.Policies.ModuleEnabled(ctx, req.OrganizationID, req.Adapter.Definition.ID)
+	if err != nil {
+		return Decision{}, fmt.Errorf("check module policy: %w", err)
+	}
+	if !req.Adapter.Definition.Enabled || !enabled {
 		return deny("MODULE_DISABLED", "module is disabled")
 	}
 	supported := false
@@ -66,11 +71,8 @@ func (g Guard) Authorize(ctx context.Context, req Request) (Decision, error) {
 		return deny("ENVIRONMENT_NOT_SUPPORTED", "module does not support the scope environment")
 	}
 	permission := "diagnostics.run"
-	if req.Adapter.Definition.RiskClass == domain.RiskControlledActive {
+	if req.Adapter.Definition.Category == "vulnerability" {
 		permission = "vulnerability.run"
-	}
-	if req.Scope.Environment == domain.EnvironmentPublic {
-		permission = "public_scan.run"
 	}
 	ok, err := g.Permissions.Has(ctx, req.OrganizationID, req.UserID, permission)
 	if err != nil {
@@ -78,6 +80,15 @@ func (g Guard) Authorize(ctx context.Context, req Request) (Decision, error) {
 	}
 	if !ok {
 		return deny("PERMISSION_DENIED", "required permission is not granted")
+	}
+	if req.Scope.Environment == domain.EnvironmentPublic {
+		ok, err = g.Permissions.Has(ctx, req.OrganizationID, req.UserID, "public_scan.run")
+		if err != nil {
+			return Decision{}, fmt.Errorf("check public permission: %w", err)
+		}
+		if !ok {
+			return deny("PUBLIC_SCOPE_PERMISSION_DENIED", "public assessment permission is not granted")
+		}
 	}
 	ok, err = g.Agents.Supports(ctx, req.OrganizationID, req.AgentID, req.Adapter.Definition.RequiredCapabilities)
 	if err != nil {

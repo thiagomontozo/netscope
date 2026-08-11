@@ -10,9 +10,37 @@ import (
 	"encoding/base32"
 	"encoding/binary"
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 )
+
+type MFASetup struct {
+	Secret          string   `json:"secret"`
+	ProvisioningURI string   `json:"provisioningUri"`
+	RecoveryCodes   []string `json:"recoveryCodes"`
+}
+
+func NewMFASetup(issuer, account string) (MFASetup, []string, error) {
+	raw := make([]byte, 20)
+	if _, err := rand.Read(raw); err != nil {
+		return MFASetup{}, nil, err
+	}
+	secret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)
+	codes := make([]string, 10)
+	hashes := make([]string, 10)
+	for index := range codes {
+		plain, _, err := NewOpaqueToken(9)
+		if err != nil {
+			return MFASetup{}, nil, err
+		}
+		codes[index] = plain
+		hashes[index] = HashRecoveryCode(plain)
+	}
+	label := url.PathEscape(issuer + ":" + account)
+	query := url.Values{"secret": {secret}, "issuer": {issuer}, "algorithm": {"SHA1"}, "digits": {"6"}, "period": {"30"}}
+	return MFASetup{Secret: secret, ProvisioningURI: "otpauth://totp/" + label + "?" + query.Encode(), RecoveryCodes: codes}, hashes, nil
+}
 
 func EncryptSecret(masterKey, secret []byte) ([]byte, error) {
 	if len(masterKey) < 32 {

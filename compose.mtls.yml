@@ -1,0 +1,19 @@
+services:
+  backend:
+    environment:
+      NETSCOPE_ENV: production
+      NETSCOPE_ADDRESS: :8443
+      NETSCOPE_TLS_CERT_FILE: /run/secrets/server.crt
+      NETSCOPE_TLS_KEY_FILE: /run/secrets/server.key
+      NETSCOPE_AGENT_CA_CERT_FILE: /run/secrets/agent-ca.crt
+      NETSCOPE_AGENT_CA_KEY_FILE: /run/secrets/agent-ca.key
+    ports: ["8443:8443"]
+    volumes:
+      - ./certificates/server.crt:/run/secrets/server.crt:ro
+      - ./certificates/server.key:/run/secrets/server.key:ro
+      - ./certificates/agent-ca.crt:/run/secrets/agent-ca.crt:ro
+      - ./certificates/agent-ca.key:/run/secrets/agent-ca.key:ro
+  frontend:
+    volumes:
+      - ./deploy/nginx-mtls.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certificates/server-ca.crt:/run/secrets/server-ca.crt:ro

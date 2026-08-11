@@ -21,6 +21,11 @@ func (s ControlPlane) ValidateSession(ctx context.Context, tokenHash string) (do
 	}
 	return org, user, err
 }
+func (s ControlPlane) ValidateAgentFingerprint(ctx context.Context, fingerprint string) (domain.ID, domain.ID, error) {
+	var org, agent domain.ID
+	err := s.Pool.QueryRow(ctx, `SELECT organization_id::text,id::text FROM agents WHERE identity_fingerprint=$1 AND status IN ('ONLINE','DEGRADED') AND (certificate_expires_at IS NULL OR certificate_expires_at>now())`, fingerprint).Scan(&org, &agent)
+	return org, agent, err
+}
 func (s ControlPlane) GetForOrganization(ctx context.Context, organizationID, scopeID domain.ID) (domain.AuthorizedScope, error) {
 	var v domain.AuthorizedScope
 	err := s.Pool.QueryRow(ctx, `SELECT id,organization_id,type,value,environment,status,coalesce(verification_type,''),verified_at,verified_by,valid_from,valid_until,notes,created_at FROM authorized_scopes WHERE organization_id=$1 AND id=$2`, organizationID, scopeID).Scan(&v.ID, &v.OrganizationID, &v.Type, &v.Value, &v.Environment, &v.Status, &v.VerificationType, &v.VerifiedAt, &v.VerifiedBy, &v.ValidFrom, &v.ValidUntil, &v.Notes, &v.CreatedAt)
@@ -56,8 +61,13 @@ func (s ControlPlane) Supports(ctx context.Context, organizationID, agentID doma
 	}
 	return true, nil
 }
-func (s ControlPlane) WithinMaintenanceWindow(context.Context, domain.ID, time.Time) bool {
-	return true
+func (s ControlPlane) WithinMaintenanceWindow(ctx context.Context,organizationID domain.ID,now time.Time) bool {
+	var allowed bool;err:=s.Pool.QueryRow(ctx,`SELECT NOT EXISTS(SELECT 1 FROM maintenance_windows WHERE organization_id=$1 AND enabled) OR EXISTS(SELECT 1 FROM maintenance_windows WHERE organization_id=$1 AND enabled AND $2>=starts_at AND $2<ends_at)`,organizationID,now).Scan(&allowed);return err==nil&&allowed
+}
+func (s ControlPlane) ModuleEnabled(ctx context.Context, organizationID domain.ID, moduleID string) (bool, error) {
+	var enabled bool
+	err := s.Pool.QueryRow(ctx, `SELECT coalesce((SELECT enabled FROM organization_module_settings WHERE organization_id=$1 AND module_id=$2),(SELECT enabled FROM module_definitions WHERE id=$2),false)`, organizationID, moduleID).Scan(&enabled)
+	return enabled, err
 }
 func (s ControlPlane) AllowRate(ctx context.Context, organizationID, scopeID domain.ID, moduleID string) bool {
 	var allowed bool

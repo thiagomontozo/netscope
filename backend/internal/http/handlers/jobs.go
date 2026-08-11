@@ -62,11 +62,15 @@ func (h Jobs) Create(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusForbidden, decision.Code, decision.Reason)
 		return
 	}
-	job := domain.AnalysisJob{ID: domain.ID(newID()), OrganizationID: org, ModuleID: input.ModuleID, AssetID: input.AssetID, ScopeID: input.ScopeID, AgentID: input.AgentID, RequestedBy: user, Parameters: input.Parameters, RiskClass: adapter.Definition.RiskClass, Status: domain.JobQueued, CreatedAt: now, TimeoutAt: decision.TimeoutAt}
+	jobID, idErr := domain.NewID()
+	if idErr != nil {
+		middleware.WriteError(w, r, http.StatusInternalServerError, "JOB_ID_FAILED", "job identity could not be generated")
+		return
+	}
+	job := domain.AnalysisJob{ID: jobID, OrganizationID: org, ModuleID: input.ModuleID, AssetID: input.AssetID, ScopeID: input.ScopeID, AgentID: input.AgentID, RequestedBy: user, Parameters: input.Parameters, RiskClass: adapter.Definition.RiskClass, Status: domain.JobQueued, CreatedAt: now, TimeoutAt: decision.TimeoutAt}
 	if err := h.Store.CreateAuthorized(r.Context(), job, decision.NormalizedTarget); err != nil {
 		middleware.WriteError(w, r, http.StatusInternalServerError, "JOB_CREATE_FAILED", "the job could not be created")
 		return
 	}
 	middleware.JSON(w, http.StatusAccepted, map[string]any{"data": job})
 }
-func newID() string { return time.Now().UTC().Format("20060102T150405.000000000") }

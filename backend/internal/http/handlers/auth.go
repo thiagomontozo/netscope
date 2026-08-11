@@ -89,3 +89,48 @@ func (h Auth) Logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: "netscope_session", Value: "", Path: "/", HttpOnly: true, Secure: h.Production, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	w.WriteHeader(http.StatusNoContent)
 }
+func (h Auth) LogoutAll(w http.ResponseWriter, r *http.Request) {
+	if err := h.Service.RevokeAll(r.Context(), middleware.OrganizationID(r.Context()), middleware.UserID(r.Context())); err != nil {
+		middleware.WriteError(w, r, http.StatusInternalServerError, "SESSION_REVOKE_FAILED", "sessions could not be revoked")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: "netscope_session", Value: "", Path: "/", HttpOnly: true, Secure: h.Production, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type mfaSetupRequest struct {
+	Password string `json:"password"`
+}
+
+func (h Auth) BeginMFASetup(w http.ResponseWriter, r *http.Request) {
+	input, ok := decode[mfaSetupRequest](w, r, 8<<10)
+	if !ok {
+		return
+	}
+	var email, passwordHash string
+	err := h.Service.Pool.QueryRow(r.Context(), `SELECT email,password_hash FROM users WHERE organization_id=$1 AND id=$2 AND active`, middleware.OrganizationID(r.Context()), middleware.UserID(r.Context())).Scan(&email, &passwordHash)
+	if err != nil || !auth.VerifyPassword(input.Password, passwordHash) {
+		middleware.WriteError(w, r, http.StatusUnauthorized, "REAUTHENTICATION_FAILED", "current password is invalid")
+		return
+	}
+	setup, err := h.Service.BeginMFASetup(r.Context(), middleware.OrganizationID(r.Context()), middleware.UserID(r.Context()), email)
+	if err != nil {
+		middleware.WriteError(w, r, http.StatusInternalServerError, "MFA_SETUP_FAILED", "MFA setup could not be created")
+		return
+	}
+	middleware.JSON(w, http.StatusCreated, map[string]any{"data": setup})
+}
+func (h Auth) ConfirmMFASetup(w http.ResponseWriter, r *http.Request) {
+	input, ok := decode[mfaRequest](w, r, 4<<10)
+	if !ok {
+		return
+	}
+	if err := h.Service.ConfirmMFASetup(r.Context(), middleware.OrganizationID(r.Context()), middleware.UserID(r.Context()), input.Code); errors.Is(err, auth.ErrInvalidCredentials) {
+		middleware.WriteError(w, r, http.StatusBadRequest, "MFA_CODE_INVALID", "the authentication code is invalid")
+		return
+	} else if err != nil {
+		middleware.WriteError(w, r, http.StatusInternalServerError, "MFA_SETUP_FAILED", "MFA setup could not be confirmed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
