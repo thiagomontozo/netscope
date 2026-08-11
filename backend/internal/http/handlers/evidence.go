@@ -38,7 +38,9 @@ func (h Evidence) Raw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer reader.Close()
-	if contentType==""||strings.ContainsAny(contentType,"\r\n"){contentType="application/octet-stream"}
+	if contentType == "" || strings.ContainsAny(contentType, "\r\n") {
+		contentType = "application/octet-stream"
+	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", `attachment; filename="netscope-evidence.bin"`)
 	_, _ = io.Copy(w, reader)

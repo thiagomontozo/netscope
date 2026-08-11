@@ -270,7 +270,11 @@ func (h Management) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusBadRequest, "MODULE_UNKNOWN", "module is not registered")
 		return
 	}
-	schedulable:=map[string]bool{"network.ping":true,"network.dns":true,"network.http":true,"network.tls":true,"network.tcp":true};if !schedulable[input.ModuleID]{middleware.WriteError(w,r,http.StatusBadRequest,"MODULE_NOT_SCHEDULABLE","only safe monitoring modules can be scheduled");return}
+	schedulable := map[string]bool{"network.ping": true, "network.dns": true, "network.http": true, "network.tls": true, "network.tcp": true}
+	if !schedulable[input.ModuleID] {
+		middleware.WriteError(w, r, http.StatusBadRequest, "MODULE_NOT_SCHEDULABLE", "only safe monitoring modules can be scheduled")
+		return
+	}
 	if err := scheduler.ValidateFrequency(adapter.Definition.RiskClass, time.Duration(input.FrequencySeconds)*time.Second); err != nil {
 		middleware.WriteError(w, r, http.StatusBadRequest, "SCHEDULE_FREQUENCY_INVALID", err.Error())
 		return

@@ -261,6 +261,10 @@ See [API](docs/api.md).
 
 `compose.yml` defines PostgreSQL, the Go API, React frontend and private local artifact volume. `compose.mtls.yml` is the production overlay for a TLS server certificate and agent client-certificate CA. Certificate and key files live under the ignored `certificates/` deployment path and are mounted read-only. Scanner tools are intentionally excluded.
 
+## Continuous Integration
+
+GitHub Actions validates Go formatting, module integrity, static checks, package tests, backend and frontend builds, PostgreSQL migrations and both container images. Dependencies are installed from committed checksums and lockfiles. CI never invokes diagnostic modules or external network/security tools. See [Continuous Integration](docs/continuous-integration.md).
+
 ## Project Structure
 
 ```text
@@ -273,7 +277,7 @@ compose.yml    local deployment topology
 
 ## Deliberate Boundaries
 
-- Current status remains Experimental; production certification requires the intentionally deferred automated test, build and runtime-validation stage.
+- Current status remains Experimental. CI now validates builds and migrations, while broad domain-level, integration and end-to-end automated test coverage remains to be developed before production certification.
 - Network tool execution remains in the separate `netscope-agent` repository by design. This repository contains no scanner binary or arbitrary command runner.
 - NATS JetStream and ClickHouse remain optional future transports/stores behind existing boundaries; PostgreSQL and HTTPS polling are the required v0.1 path.
 - Outbound email and enterprise secret-manager products are deployment-specific adapters. TOTP setup, one-time recovery codes, encrypted secrets and logout-all are implemented without requiring them.
@@ -281,7 +285,7 @@ compose.yml    local deployment topology
 
 ## Roadmap
 
-**v0.2:** Zeek improvements, Suricata live integration, improved Greenbone, NVD/KEV synchronization, scheduled reports, alert policies, S3/MinIO, automated tests and CI.
+**v0.2:** Zeek improvements, Suricata live integration, improved Greenbone, NVD/KEV synchronization, scheduled reports, alert policies, S3/MinIO and expanded automated test coverage.
 
 **v0.3:** NATS JetStream, ClickHouse, distributed workers, multi-site dashboards, controlled iperf pairs, long-term telemetry and agent groups.
 

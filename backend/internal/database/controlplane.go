@@ -61,8 +61,10 @@ func (s ControlPlane) Supports(ctx context.Context, organizationID, agentID doma
 	}
 	return true, nil
 }
-func (s ControlPlane) WithinMaintenanceWindow(ctx context.Context,organizationID domain.ID,now time.Time) bool {
-	var allowed bool;err:=s.Pool.QueryRow(ctx,`SELECT NOT EXISTS(SELECT 1 FROM maintenance_windows WHERE organization_id=$1 AND enabled) OR EXISTS(SELECT 1 FROM maintenance_windows WHERE organization_id=$1 AND enabled AND $2>=starts_at AND $2<ends_at)`,organizationID,now).Scan(&allowed);return err==nil&&allowed
+func (s ControlPlane) WithinMaintenanceWindow(ctx context.Context, organizationID domain.ID, now time.Time) bool {
+	var allowed bool
+	err := s.Pool.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM maintenance_windows WHERE organization_id=$1 AND enabled) OR EXISTS(SELECT 1 FROM maintenance_windows WHERE organization_id=$1 AND enabled AND $2>=starts_at AND $2<ends_at)`, organizationID, now).Scan(&allowed)
+	return err == nil && allowed
 }
 func (s ControlPlane) ModuleEnabled(ctx context.Context, organizationID domain.ID, moduleID string) (bool, error) {
 	var enabled bool

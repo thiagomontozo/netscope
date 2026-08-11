@@ -156,7 +156,7 @@ func (h Agent) Result(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for _, item := range input.Evidence {
-		if len(item.Summary) > 4000 || len(item.ContentType)>200 || strings.ContainsAny(item.ContentType,"\r\n") {
+		if len(item.Summary) > 4000 || len(item.ContentType) > 200 || strings.ContainsAny(item.ContentType, "\r\n") {
 			middleware.WriteError(w, r, http.StatusBadRequest, "EVIDENCE_SUMMARY_TOO_LARGE", "evidence summary exceeds policy")
 			return
 		}
