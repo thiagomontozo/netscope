@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS audit_events, notifications, retention_policies, reports, pcap_artifacts, traffic_observations, vulnerability_enrichments, vulnerabilities, evidence, findings, observations, schedules, analysis_jobs, module_definitions, agent_enrollment_tokens, agents, assets, authorized_scopes, mfa_login_challenges, mfa_configurations, sessions, user_roles, role_permissions, permissions, roles, users, organizations CASCADE;
+DROP TYPE IF EXISTS job_status, module_risk_class, confidence_level, normalized_status, scope_environment;
