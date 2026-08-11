@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color:#172034; background:#f2f5f9; font-synthesis:none; }
+body { margin:0; min-width:320px; min-height:100vh; }
+button, input, select { font:inherit; }
+.focus-ring:focus-visible { outline:3px solid rgba(55,101,214,.28); outline-offset:2px; }
+.card { @apply rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(12,25,48,.04)]; }
+.eyebrow { @apply text-[11px] font-semibold uppercase tracking-[.13em] text-slateblue; }
+.empty-grid { background-image:radial-gradient(#dbe3ee 1px,transparent 1px); background-size:18px 18px; }

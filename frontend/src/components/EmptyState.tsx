@@ -1,0 +1,2 @@
+import { DatabaseZap } from 'lucide-react'
+export function EmptyState({title,detail}:{title:string;detail:string}){return <div className="empty-grid flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed border-line bg-panel px-6 text-center"><div className="mb-3 rounded-lg border border-line bg-white p-2.5 text-slateblue"><DatabaseZap size={22}/></div><p className="font-semibold text-ink">{title}</p><p className="mt-1 max-w-md text-sm leading-6 text-slateblue">{detail}</p></div>}
