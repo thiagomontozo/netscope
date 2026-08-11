@@ -12,6 +12,6 @@ const (
 )
 
 type Renderer interface {
-	RenderHTML(Type, map[string]unknown) ([]byte, error)
-	RenderPDF(Type, map[string]unknown) ([]byte, error)
+	RenderHTML(Type, map[string]any) ([]byte, error)
+	RenderPDF(Type, map[string]any) ([]byte, error)
 }
