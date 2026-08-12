@@ -269,7 +269,7 @@ func insertJobAndArtifact(t *testing.T, pool *pgxpool.Pool, jobID, artifactID, s
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = pool.Exec(context.Background(), `INSERT INTO artifacts(id,organization_id,job_id,type,direction,content_type,storage_key,size_bytes,sha256,status,uploaded_by_agent_id,verified_at) VALUES($1,$2,CASE WHEN $2=$3 THEN $4 ELSE NULL END,'JOB_OUTPUT','AGENT_TO_CONTROL_PLANE','text/plain','organizations/'||$2::text||'/artifacts/'||$1::text,$5,$6,$7,CASE WHEN $2=$3 THEN $8 ELSE NULL END,CASE WHEN $7='AVAILABLE' THEN now() END)`, artifactID, artifactOrg, testOrg, jobID, size, checksum, status, testAgent)
+	_, err = pool.Exec(context.Background(), `INSERT INTO artifacts(id,organization_id,job_id,type,direction,content_type,storage_key,size_bytes,sha256,status,uploaded_by_agent_id,verified_at) VALUES($1::uuid,$2::uuid,CASE WHEN $2::uuid=$3::uuid THEN $4::uuid ELSE NULL END,'JOB_OUTPUT','AGENT_TO_CONTROL_PLANE','text/plain','organizations/'||$2::text||'/artifacts/'||$1::text,$5::bigint,$6::text,$7::artifact_status,CASE WHEN $2::uuid=$3::uuid THEN $8::uuid ELSE NULL END,CASE WHEN $7::text='AVAILABLE' THEN now() END)`, artifactID, artifactOrg, testOrg, jobID, size, checksum, status, testAgent)
 	if err != nil {
 		t.Fatal(err)
 	}
