@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -88,7 +89,10 @@ func (h AgentArtifacts) Authorize(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusServiceUnavailable, "ARTIFACT_AUTHORIZATION_UNAVAILABLE", "artifact authorization is unavailable")
 		return
 	}
-	_, _ = h.Pool.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,'artifact.download_authorized','artifact',$3,'success',jsonb_build_object('purpose',$4)),($1,$2,'artifact.transfer_started','artifact',$3,'success',jsonb_build_object('purpose',$4))`, org, agent, artifactID, input.Purpose)
+	if _, err := h.Pool.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,'artifact.download_authorized','artifact',$3,'success',jsonb_build_object('purpose',$4::text)),($1,$2,'artifact.transfer_started','artifact',$3,'success',jsonb_build_object('purpose',$4::text))`, org, agent, artifactID, input.Purpose); err != nil {
+		middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_AUTHORIZATION_UNAVAILABLE", "artifact authorization audit could not be stored")
+		return
+	}
 	middleware.JSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"token": token, "purpose": input.Purpose, "expiresInSeconds": int(h.Tokens.TTL.Seconds())}})
 }
 
@@ -121,7 +125,7 @@ func (h AgentArtifacts) Download(w http.ResponseWriter, r *http.Request) {
 	if copyErr != nil || written != size {
 		event, outcome = "artifact.transfer_failed", "failure"
 	}
-	_, _ = h.Pool.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,$3,'artifact',$4,$5,jsonb_build_object('bytes',$6,'purpose','DOWNLOAD'))`, org, agent, event, artifactID, outcome, written)
+	_, _ = h.Pool.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,$3,'artifact',$4,$5,jsonb_build_object('bytes',$6::bigint,'purpose','DOWNLOAD'))`, org, agent, event, artifactID, outcome, written)
 }
 
 func (h AgentArtifacts) Upload(w http.ResponseWriter, r *http.Request) {
@@ -140,13 +144,19 @@ func (h AgentArtifacts) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if supplied := strings.ToLower(r.Header.Get("X-NetScope-Artifact-SHA256")); supplied != "" && supplied != checksum {
-		h.fail(r, org, agent, artifactID, "checksum")
+		if h.fail(r, org, agent, artifactID, "checksum") != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_FAILURE_PERSISTENCE_FAILED", "artifact failure state could not be stored")
+			return
+		}
 		middleware.WriteError(w, r, http.StatusUnprocessableEntity, "ARTIFACT_CHECKSUM_MISMATCH", "artifact checksum header differs from manifest")
 		return
 	}
 	temporary, err := os.CreateTemp(h.TempDir, "netscope-artifact-*.part")
 	if err != nil {
-		h.fail(r, org, agent, artifactID, "storage")
+		if h.fail(r, org, agent, artifactID, "storage") != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_FAILURE_PERSISTENCE_FAILED", "artifact failure state could not be stored")
+			return
+		}
 		middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_UPLOAD_FAILED", "artifact upload failed")
 		return
 	}
@@ -154,7 +164,10 @@ func (h AgentArtifacts) Upload(w http.ResponseWriter, r *http.Request) {
 	defer os.Remove(path)
 	defer temporary.Close()
 	if err := temporary.Chmod(0o600); err != nil {
-		h.fail(r, org, agent, artifactID, "storage")
+		if h.fail(r, org, agent, artifactID, "storage") != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_FAILURE_PERSISTENCE_FAILED", "artifact failure state could not be stored")
+			return
+		}
 		middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_UPLOAD_FAILED", "artifact temporary storage failed")
 		return
 	}
@@ -172,31 +185,43 @@ func (h AgentArtifacts) Upload(w http.ResponseWriter, r *http.Request) {
 		if !strings.EqualFold(actual, checksum) {
 			code = "ARTIFACT_CHECKSUM_MISMATCH"
 		}
-		h.fail(r, org, agent, artifactID, reason)
+		if h.fail(r, org, agent, artifactID, reason) != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_FAILURE_PERSISTENCE_FAILED", "artifact failure state could not be stored")
+			return
+		}
 		middleware.WriteError(w, r, status, code, "artifact size or checksum validation failed")
 		return
 	}
 	if err := temporary.Sync(); err != nil {
-		h.fail(r, org, agent, artifactID, "storage")
+		if h.fail(r, org, agent, artifactID, "storage") != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_FAILURE_PERSISTENCE_FAILED", "artifact failure state could not be stored")
+			return
+		}
 		middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_UPLOAD_FAILED", "artifact temporary storage sync failed")
 		return
 	}
 	if _, err := temporary.Seek(0, io.SeekStart); err != nil || h.Storage.Put(r.Context(), key, temporary) != nil {
-		h.fail(r, org, agent, artifactID, "storage")
+		if h.fail(r, org, agent, artifactID, "storage") != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_FAILURE_PERSISTENCE_FAILED", "artifact failure state could not be stored")
+			return
+		}
 		middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_UPLOAD_FAILED", "artifact storage failed")
 		return
 	}
 	tag, err := h.Pool.Exec(r.Context(), `WITH changed AS (UPDATE artifacts SET status='AVAILABLE',verified_at=now(),uploaded_by_agent_id=$2 WHERE organization_id=$1 AND id=$3 AND status='UPLOADING' RETURNING id) INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome) SELECT $1,$2,event_type,'artifact',id::text,'success' FROM changed CROSS JOIN (VALUES ('artifact.uploaded'),('artifact.checksum_verified'),('artifact.transfer_completed')) AS events(event_type)`, org, agent, artifactID)
 	if err != nil || tag.RowsAffected() != 3 {
 		_ = h.Storage.Delete(r.Context(), key)
-		h.fail(r, org, agent, artifactID, "metadata")
+		if h.fail(r, org, agent, artifactID, "metadata") != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_FAILURE_PERSISTENCE_FAILED", "artifact failure state could not be stored")
+			return
+		}
 		middleware.WriteError(w, r, http.StatusInternalServerError, "ARTIFACT_UPLOAD_FAILED", "artifact metadata finalization failed")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h AgentArtifacts) fail(r *http.Request, org, agent, id, reason string) {
+func (h AgentArtifacts) fail(r *http.Request, org, agent, id, reason string) error {
 	event := "artifact.transfer_failed"
 	if reason == "checksum" {
 		event = "artifact.checksum_failed"
@@ -207,16 +232,20 @@ func (h AgentArtifacts) fail(r *http.Request, org, agent, id, reason string) {
 	defer cancel()
 	tx, err := h.Pool.Begin(ctx)
 	if err != nil {
-		return
+		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `UPDATE artifacts SET status='FAILED',verified_at=NULL WHERE organization_id=$1 AND id=$2 AND status<>'AVAILABLE'`, org, id); err != nil {
-		return
+	tag, err := tx.Exec(ctx, `UPDATE artifacts SET status='FAILED',verified_at=NULL WHERE organization_id=$1 AND id=$2 AND status<>'AVAILABLE'`, org, id)
+	if err != nil {
+		return err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,$3,'artifact',$4,'failure',jsonb_build_object('reason',$5))`, org, agent, event, id, reason); err != nil {
-		return
+	if tag.RowsAffected() != 1 {
+		return errors.New("artifact failure transition did not update exactly one row")
 	}
-	_ = tx.Commit(ctx)
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,$3,'artifact',$4,'failure',jsonb_build_object('reason',$5::text))`, org, agent, event, id, reason); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 func stringInt(value int64) string { return strconv.FormatInt(value, 10) }
 func artifactStorageKey(organizationID, jobID, artifactID string) string {

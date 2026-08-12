@@ -186,7 +186,7 @@ func (s EnrollmentService) Enroll(ctx context.Context, in EnrollmentRequest) (En
 	if err != nil {
 		return EnrollmentResult{}, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,'agent.enrolled','agent',$2,'success',jsonb_build_object('fingerprint',$3))`, org, agentID, fingerprint)
+	_, err = tx.Exec(ctx, `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,'agent.enrolled','agent',$2::text,'success',jsonb_build_object('fingerprint',$3::text))`, org, agentID, fingerprint)
 	if err != nil {
 		return EnrollmentResult{}, err
 	}

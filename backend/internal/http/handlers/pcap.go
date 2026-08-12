@@ -93,7 +93,7 @@ func (h PCAP) Upload(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusInternalServerError, "PCAP_UPLOAD_FAILED", "PCAP metadata could not be saved")
 		return
 	}
-	_, _ = h.Pool.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_user_id,event_type,resource_type,resource_id,request_id,outcome,metadata) VALUES($1,$2,'pcap.uploaded','pcap',$3,$4,'success',jsonb_build_object('bytes',$5,'checksum',$6))`, org, middleware.UserID(r.Context()), id, middleware.RequestIDFrom(r.Context()), counter.count, checksum)
+	_, _ = h.Pool.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_user_id,event_type,resource_type,resource_id,request_id,outcome,metadata) VALUES($1,$2,'pcap.uploaded','pcap',$3,$4,'success',jsonb_build_object('bytes',$5::bigint,'checksum',$6::text))`, org, middleware.UserID(r.Context()), id, middleware.RequestIDFrom(r.Context()), counter.count, checksum)
 	middleware.JSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"id": id, "checksum": checksum, "expiresAt": expires}})
 }
 func (h PCAP) Download(w http.ResponseWriter, r *http.Request) {
