@@ -1,5 +1,10 @@
 # Agent Compatibility
 
+Agent version, contract version and capability schema version are recorded
+separately. Equal supported majors are `COMPATIBLE`; a newer minor is
+`UPGRADE_RECOMMENDED`; a different or invalid major is `INCOMPATIBLE` or
+`UNKNOWN`. Signed work never silently downgrades for a legacy Agent.
+
 The Control Plane stores agent version, protocol version and capability
 manifest. Compatibility states are `COMPATIBLE`, `UPGRADE_RECOMMENDED`,
 `INCOMPATIBLE` and `UNKNOWN`.

@@ -1,5 +1,10 @@
 # NetScope Agent Protocol v1
 
+Protocol `1.0` remains the public contract. The Control Plane is the canonical
+schema source; fixtures and TEST ONLY vectors validate signed jobs and generic
+artifacts in addition to the existing lifecycle messages. New wire fields stay
+optional for 1.0 compatibility while deployment policy may require signing.
+
 The normative machine-readable contract is in `contracts/agent/v1` and uses
 `protocolVersion: "1.0"`. Browser clients cannot call the Agent API.
 

@@ -1,5 +1,10 @@
 # Security Model
 
+Protocol 1.x trusted communication adds named Ed25519 job signatures, explicit
+no-downgrade policy, bounded replay checks, purpose-scoped artifact tokens,
+streaming integrity and certificate replacement history on top of mandatory
+mTLS, Authorized Scope and Scan Guard.
+
 Protocol v1 adds explicit compatibility, result idempotency and target-context
 binding without weakening mTLS, Authorized Scope or ScanGuard. The Agent API
 rejects unknown request fields and mismatched protocol/job/agent/module IDs.

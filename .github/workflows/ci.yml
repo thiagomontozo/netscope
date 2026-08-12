@@ -51,6 +51,9 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
+      - name: Validate Protocol 1.x contracts and trust invariants
+        run: go test ./internal/contracttest ./internal/agents ./internal/artifacts
+
       - name: Build server
         run: go build -trimpath ./cmd/server
 

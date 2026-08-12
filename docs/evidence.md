@@ -1,5 +1,10 @@
 # Evidence
 
+Evidence may reference generic artifact metadata. Artifact content stays in
+ObjectStorage and becomes available only after job-scoped authorization,
+bounded streaming, final-size and SHA-256 verification. A checksum does not by
+itself establish forensic custody.
+
 See [Network Evidence](network-evidence.md) for the full provenance model.
 Evidence records module, agent, job, optional vantage, observation time, SHA-256,
 size and content type. References identify the technical source type; artifacts

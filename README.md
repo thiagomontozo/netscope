@@ -88,6 +88,16 @@ NetScope Agent Protocol `1.0` is specified under [`contracts/agent/v1`](contract
 
 Result delivery is idempotent by job and result identity/version. Repeating the accepted result is a no-op; a conflicting result is rejected. Ed25519 envelope signing is a documented, inactive interface until protected key management and trust distribution are configured. mTLS remains mandatory.
 
+## Trusted Agent Communication
+
+NetScope Protocol 1.x supports protected-file Ed25519 JobEnvelope signing,
+named signing trust distributed during authenticated enrollment, bounded replay
+protection, job-scoped artifact transfer tokens, streaming SHA-256 integrity,
+certificate lifecycle/rotation records, contract fixtures and safe integration
+tests. mTLS remains mandatory and no unsigned fallback occurs when signed-job
+policy is enabled. This remains Experimental: HSM/OCSP, multipart resume,
+automatic Agent updates and production-scale load validation are not included.
+
 ## Authorized Scope
 
 Every active target originates from an organization-owned `AuthorizedScope` with a type (`HOSTNAME`, `IP`, `CIDR`, `URL`), environment (`INTERNAL`, `PUBLIC`), approval state and validity window. Hostnames can use DNS TXT or HTTP file challenges. IP and CIDR targets require explicit administrative approval. Browsers cannot submit arbitrary public targets.

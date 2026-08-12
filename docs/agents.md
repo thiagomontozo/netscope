@@ -1,5 +1,10 @@
 # Agents
 
+Agent trust status combines Protocol/contract/capability versions, mTLS
+certificate history, expiry/rotation, named Ed25519 job trust, heartbeat and
+artifact transfer state. Revocation blocks heartbeat, jobs, rotation and
+artifact authorization through the shared database identity middleware.
+
 Agents implement [Protocol v1](agent-protocol.md), connect outbound and report a
 versioned capability manifest. The Control Plane stores protocol compatibility,
 heartbeat health, slots and vantage association. Centralized grace thresholds
