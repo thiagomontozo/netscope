@@ -205,7 +205,18 @@ func (h AgentArtifacts) fail(r *http.Request, org, agent, id, reason string) {
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 	defer cancel()
-	_, _ = h.Pool.Exec(ctx, `UPDATE artifacts SET status='FAILED',verified_at=NULL WHERE organization_id=$1 AND id=$2 AND status<>'AVAILABLE'; INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$3,$5,'artifact',$2,'failure',jsonb_build_object('reason',$4))`, org, id, agent, reason, event)
+	tx, err := h.Pool.Begin(ctx)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `UPDATE artifacts SET status='FAILED',verified_at=NULL WHERE organization_id=$1 AND id=$2 AND status<>'AVAILABLE'`, org, id); err != nil {
+		return
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,$3,'artifact',$4,'failure',jsonb_build_object('reason',$5))`, org, agent, event, id, reason); err != nil {
+		return
+	}
+	_ = tx.Commit(ctx)
 }
 func stringInt(value int64) string { return strconv.FormatInt(value, 10) }
 func artifactStorageKey(organizationID, jobID, artifactID string) string {

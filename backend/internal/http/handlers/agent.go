@@ -349,7 +349,12 @@ func (h Agent) Result(w http.ResponseWriter, r *http.Request) {
 			middleware.WriteError(w, r, http.StatusBadRequest, "OBSERVATION_EVIDENCE_INVALID", "observation evidence is missing or outside the authorized context")
 			return
 		}
-		_, err = tx.Exec(r.Context(), `UPDATE evidence SET observation_id=$4 WHERE organization_id=$1 AND job_id=$2 AND id=$3 AND observation_id IS NULL; INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$5,'observation.created','observation',$4::text,'success',jsonb_build_object('evidenceId',$3::text))`, org, id, item.EvidenceID, observationID, agent)
+		_, err = tx.Exec(r.Context(), `UPDATE evidence SET observation_id=$4 WHERE organization_id=$1 AND job_id=$2 AND id=$3 AND observation_id IS NULL`, org, id, item.EvidenceID, observationID)
+		if err != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "OBSERVATION_IMPORT_FAILED", "observation relationship could not be stored")
+			return
+		}
+		_, err = tx.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,'observation.created','observation',$3,'success',jsonb_build_object('evidenceId',$4::text))`, org, agent, string(observationID), item.EvidenceID)
 		if err != nil {
 			middleware.WriteError(w, r, http.StatusInternalServerError, "OBSERVATION_IMPORT_FAILED", "observation relationship could not be stored")
 			return

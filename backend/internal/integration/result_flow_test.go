@@ -265,7 +265,11 @@ func testCSR(t *testing.T) (string, *ecdsa.PrivateKey) {
 
 func insertJobAndArtifact(t *testing.T, pool *pgxpool.Pool, jobID, artifactID, status, checksum string, size int64, artifactOrg domain.ID) {
 	t.Helper()
-	_, err := pool.Exec(context.Background(), `INSERT INTO analysis_jobs(id,organization_id,module_id,asset_id,scope_id,agent_id,requested_by,parameters,normalized_target,risk_class,status,started_at,timeout_at) VALUES($1,$2,'mock.safe',$3,$4,$5,$6,'{}','fixture.test.invalid','PASSIVE','RUNNING',now()-interval '1 minute',now()+interval '10 minutes'); INSERT INTO artifacts(id,organization_id,job_id,type,direction,content_type,storage_key,size_bytes,sha256,status,uploaded_by_agent_id,verified_at) VALUES($7,$8,CASE WHEN $8=$2 THEN $1 ELSE NULL END,'JOB_OUTPUT','AGENT_TO_CONTROL_PLANE','text/plain','organizations/'||$8::text||'/artifacts/'||$7::text,$9,$10,$11,CASE WHEN $8=$2 THEN $5 ELSE NULL END,CASE WHEN $11='AVAILABLE' THEN now() END)`, jobID, testOrg, testAsset, testScope, testAgent, testUser, artifactID, artifactOrg, size, checksum, status)
+	_, err := pool.Exec(context.Background(), `INSERT INTO analysis_jobs(id,organization_id,module_id,asset_id,scope_id,agent_id,requested_by,parameters,normalized_target,risk_class,status,started_at,timeout_at) VALUES($1,$2,'mock.safe',$3,$4,$5,$6,'{}','fixture.test.invalid','PASSIVE','RUNNING',now()-interval '1 minute',now()+interval '10 minutes')`, jobID, testOrg, testAsset, testScope, testAgent, testUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = pool.Exec(context.Background(), `INSERT INTO artifacts(id,organization_id,job_id,type,direction,content_type,storage_key,size_bytes,sha256,status,uploaded_by_agent_id,verified_at) VALUES($1,$2,CASE WHEN $2=$3 THEN $4 ELSE NULL END,'JOB_OUTPUT','AGENT_TO_CONTROL_PLANE','text/plain','organizations/'||$2::text||'/artifacts/'||$1::text,$5,$6,$7,CASE WHEN $2=$3 THEN $8 ELSE NULL END,CASE WHEN $7='AVAILABLE' THEN now() END)`, artifactID, artifactOrg, testOrg, jobID, size, checksum, status, testAgent)
 	if err != nil {
 		t.Fatal(err)
 	}
