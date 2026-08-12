@@ -42,6 +42,7 @@ type JobEnvelope struct {
 	ExpiresAt                time.Time        `json:"expiresAt"`
 	TimeoutSeconds           int              `json:"timeoutSeconds"`
 	Nonce                    string           `json:"nonce"`
+	SigningKeyID             string           `json:"signingKeyId,omitempty"`
 	SignatureAlgorithm       string           `json:"signatureAlgorithm,omitempty"`
 	Signature                string           `json:"signature,omitempty"`
 }
