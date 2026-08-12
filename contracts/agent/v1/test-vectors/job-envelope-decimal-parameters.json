@@ -1,0 +1,33 @@
+{
+  "name": "job-envelope-decimal-parameters",
+  "input": {
+    "agentId": "11111111-1111-4111-8111-111111111111",
+    "authorizationReference": "test-only:fixture",
+    "expiresAt": "2026-08-11T12:05:00Z",
+    "issuedAt": "2026-08-11T12:00:00Z",
+    "jobId": "33333333-3333-4333-8333-333333333333",
+    "moduleId": "mock.safe",
+    "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "organizationId": "22222222-2222-4222-8222-222222222222",
+    "protocolVersion": "1.0",
+    "riskClass": "PASSIVE",
+    "scopeEnvironment": "INTERNAL",
+    "scopeId": "44444444-4444-4444-8444-444444444444",
+    "target": {
+      "type": "HOSTNAME",
+      "value": "fixture.test.invalid"
+    },
+    "timeoutSeconds": 30,
+    "validatedParameters": {
+      "latencyMultiplier": 1.25,
+      "packetLossThreshold": 2.5
+    }
+  },
+  "canonical": "{\"agentId\":\"11111111-1111-4111-8111-111111111111\",\"authorizationReference\":\"test-only:fixture\",\"expiresAt\":\"2026-08-11T12:05:00Z\",\"issuedAt\":\"2026-08-11T12:00:00Z\",\"jobId\":\"33333333-3333-4333-8333-333333333333\",\"moduleId\":\"mock.safe\",\"nonce\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"organizationId\":\"22222222-2222-4222-8222-222222222222\",\"protocolVersion\":\"1.0\",\"riskClass\":\"PASSIVE\",\"scopeEnvironment\":\"INTERNAL\",\"scopeId\":\"44444444-4444-4444-8444-444444444444\",\"target\":{\"type\":\"HOSTNAME\",\"value\":\"fixture.test.invalid\"},\"timeoutSeconds\":30,\"validatedParameters\":{\"latencyMultiplier\":1.25,\"packetLossThreshold\":2.5}}",
+  "sha256": "3313a625c796007bd5fc4dd8a620b0a88ef320d7836081d674a6f60cc6ff161d",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "GWA86KbDP8pFnEMpzEGxmUtKqUI9k0eq0kUitEHhydjuS76+uHoW48HUJUfxC1oagwVOrC6CceW+2k+pCDeFBg==",
+  "expectedVerification": "VALID"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "unicode",
+  "input": {
+    "€": "Euro",
+    "\r": "CR",
+    "😀": "Emoji",
+    "ö": "Diaeresis"
+  },
+  "canonical": "{\"\\r\":\"CR\",\"ö\":\"Diaeresis\",\"€\":\"Euro\",\"😀\":\"Emoji\"}",
+  "sha256": "53f4a48ad4938c27765ed24e316cf239557a4692074896d2a2cb49591f233fb0",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "sIoKsrZlsd2DKVqqTjIhG2n5F4ECUQ20Bn74OexQNV36jkih8tWruVMaSB0IUK6ORkQcssE45RlWcC6kHzyABQ==",
+  "expectedVerification": "VALID"
+}

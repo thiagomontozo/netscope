@@ -1,0 +1,42 @@
+{
+  "name": "job-envelope-nested-parameters",
+  "input": {
+    "agentId": "11111111-1111-4111-8111-111111111111",
+    "authorizationReference": "test-only:fixture",
+    "expiresAt": "2026-08-11T12:05:00Z",
+    "issuedAt": "2026-08-11T12:00:00Z",
+    "jobId": "33333333-3333-4333-8333-333333333333",
+    "moduleId": "mock.safe",
+    "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "organizationId": "22222222-2222-4222-8222-222222222222",
+    "protocolVersion": "1.0",
+    "riskClass": "PASSIVE",
+    "scopeEnvironment": "INTERNAL",
+    "scopeId": "44444444-4444-4444-8444-444444444444",
+    "target": {
+      "type": "HOSTNAME",
+      "value": "fixture.test.invalid"
+    },
+    "timeoutSeconds": 30,
+    "validatedParameters": {
+      "profile": {
+        "thresholds": [
+          1.25,
+          2.5
+        ],
+        "enabled": true
+      },
+      "ports": [
+        443,
+        8443
+      ]
+    }
+  },
+  "canonical": "{\"agentId\":\"11111111-1111-4111-8111-111111111111\",\"authorizationReference\":\"test-only:fixture\",\"expiresAt\":\"2026-08-11T12:05:00Z\",\"issuedAt\":\"2026-08-11T12:00:00Z\",\"jobId\":\"33333333-3333-4333-8333-333333333333\",\"moduleId\":\"mock.safe\",\"nonce\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"organizationId\":\"22222222-2222-4222-8222-222222222222\",\"protocolVersion\":\"1.0\",\"riskClass\":\"PASSIVE\",\"scopeEnvironment\":\"INTERNAL\",\"scopeId\":\"44444444-4444-4444-8444-444444444444\",\"target\":{\"type\":\"HOSTNAME\",\"value\":\"fixture.test.invalid\"},\"timeoutSeconds\":30,\"validatedParameters\":{\"ports\":[443,8443],\"profile\":{\"enabled\":true,\"thresholds\":[1.25,2.5]}}}",
+  "sha256": "d191b9300abf702c75dddff40dbb84a477595e670fea9702b670063707760b6f",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "i76RGX52ZLQ23LR7sp3sBM9kUsQ4UxeYrkNv4AgW+rOtGQ9tbFELkgh0kX5jPC8CQPT7WAH+3yhV7+7K7Ot0Bg==",
+  "expectedVerification": "VALID"
+}

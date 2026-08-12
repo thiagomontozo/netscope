@@ -12,13 +12,10 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"sort"
-	"strconv"
-	"strings"
 	"time"
 
+	"github.com/thiagomontozo/netscope/backend/internal/canonicaljson"
 	"github.com/thiagomontozo/netscope/backend/internal/domain"
 )
 
@@ -87,14 +84,9 @@ func (s *Ed25519Signer) Sign(_ context.Context, envelope domain.JobEnvelope) (st
 }
 
 func CanonicalJobPayload(envelope domain.JobEnvelope) ([]byte, error) {
-	var parameters any
-	decoder := json.NewDecoder(bytes.NewReader(envelope.ValidatedParameters))
-	decoder.UseNumber()
-	if err := decoder.Decode(&parameters); err != nil {
+	parameters, err := canonicaljson.Canonicalize(envelope.ValidatedParameters)
+	if err != nil {
 		return nil, fmt.Errorf("decode validated parameters: %w", err)
-	}
-	if decoder.Decode(&struct{}{}) != io.EOF {
-		return nil, errors.New("validated parameters contain trailing JSON")
 	}
 	payload := map[string]any{
 		"agentId": envelope.AgentID, "authorizationReference": envelope.AuthorizationReference,
@@ -103,7 +95,7 @@ func CanonicalJobPayload(envelope domain.JobEnvelope) ([]byte, error) {
 		"organizationId": envelope.OrganizationID, "protocolVersion": envelope.ProtocolVersion,
 		"riskClass": envelope.RiskClass, "scopeEnvironment": envelope.ScopeEnvironment, "scopeId": envelope.ScopeID,
 		"target":         map[string]any{"type": envelope.Target.Type, "value": envelope.Target.Value},
-		"timeoutSeconds": envelope.TimeoutSeconds, "validatedParameters": parameters,
+		"timeoutSeconds": envelope.TimeoutSeconds, "validatedParameters": json.RawMessage(parameters),
 	}
 	if envelope.AssetID != nil {
 		payload["assetId"] = *envelope.AssetID
@@ -111,94 +103,5 @@ func CanonicalJobPayload(envelope domain.JobEnvelope) ([]byte, error) {
 	if envelope.ServiceID != nil {
 		payload["serviceId"] = *envelope.ServiceID
 	}
-	return canonicalJSON(payload)
-}
-
-func canonicalJSON(value any) ([]byte, error) {
-	var output bytes.Buffer
-	if err := writeCanonical(&output, value); err != nil {
-		return nil, err
-	}
-	return output.Bytes(), nil
-}
-
-func writeCanonical(output *bytes.Buffer, value any) error {
-	switch typed := value.(type) {
-	case nil:
-		output.WriteString("null")
-	case bool:
-		if typed {
-			output.WriteString("true")
-		} else {
-			output.WriteString("false")
-		}
-	case string:
-		encoded, _ := json.Marshal(typed)
-		output.Write(encoded)
-	case domain.ID:
-		encoded, _ := json.Marshal(string(typed))
-		output.Write(encoded)
-	case domain.ScopeType:
-		encoded, _ := json.Marshal(string(typed))
-		output.Write(encoded)
-	case domain.ScopeEnvironment:
-		encoded, _ := json.Marshal(string(typed))
-		output.Write(encoded)
-	case domain.RiskClass:
-		encoded, _ := json.Marshal(string(typed))
-		output.Write(encoded)
-	case int:
-		output.WriteString(strconv.Itoa(typed))
-	case json.Number:
-		if strings.ContainsAny(string(typed), ".eE") {
-			return errors.New("signed job parameters must use integer JSON numbers")
-		}
-		if _, err := strconv.ParseInt(string(typed), 10, 64); err != nil {
-			return errors.New("invalid signed job integer")
-		}
-		output.WriteString(string(typed))
-	case []any:
-		output.WriteByte('[')
-		for index, item := range typed {
-			if index > 0 {
-				output.WriteByte(',')
-			}
-			if err := writeCanonical(output, item); err != nil {
-				return err
-			}
-		}
-		output.WriteByte(']')
-	case map[string]any:
-		keys := make([]string, 0, len(typed))
-		for key := range typed {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		output.WriteByte('{')
-		for index, key := range keys {
-			if index > 0 {
-				output.WriteByte(',')
-			}
-			encoded, _ := json.Marshal(key)
-			output.Write(encoded)
-			output.WriteByte(':')
-			if err := writeCanonical(output, typed[key]); err != nil {
-				return err
-			}
-		}
-		output.WriteByte('}')
-	default:
-		encoded, err := json.Marshal(typed)
-		if err != nil {
-			return err
-		}
-		decoder := json.NewDecoder(strings.NewReader(string(encoded)))
-		decoder.UseNumber()
-		var normalized any
-		if err := decoder.Decode(&normalized); err != nil {
-			return err
-		}
-		return writeCanonical(output, normalized)
-	}
-	return nil
+	return canonicaljson.Marshal(payload)
 }

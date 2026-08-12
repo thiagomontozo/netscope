@@ -1,0 +1,15 @@
+{
+  "name": "zero",
+  "input": {
+    "integer": 0,
+    "decimal": 0.0,
+    "negative": -0
+  },
+  "canonical": "{\"decimal\":0,\"integer\":0,\"negative\":0}",
+  "sha256": "ab3e8a2c10ce448a89e3e0734622b879e071ae5a801cc9eb0a49432cfc22c283",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "NBrv12EXhuGOn5057PoSUXlG2psXnzeitOGQFX5fq15I7qaaaEsC636+zgdFA7X6DDhqfqKXAKyVUfF3qm/ABg==",
+  "expectedVerification": "VALID"
+}

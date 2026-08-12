@@ -1,0 +1,13 @@
+{
+  "name": "integer",
+  "input": {
+    "value": 443
+  },
+  "canonical": "{\"value\":443}",
+  "sha256": "20566057b7a30778f4cca5ee80f520448579d3b5e3e865c22a8d9eacba790702",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "k/ucH1m7LGt33WRKnOMMmqWyHlcar/7Ms6UhcjfQePEd8U3gKHVeBLP/PGb0yDktCg/jeaJSUefbK1f1g7r4Cg==",
+  "expectedVerification": "VALID"
+}

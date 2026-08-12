@@ -1,0 +1,19 @@
+{
+  "name": "parameters-mixed",
+  "input": {
+    "port": 443,
+    "timeoutSeconds": 30,
+    "packetLossThreshold": 2.5,
+    "latencyMultiplier": 1.25,
+    "negativeExample": -3.75,
+    "enabled": true,
+    "mode": "synthetic"
+  },
+  "canonical": "{\"enabled\":true,\"latencyMultiplier\":1.25,\"mode\":\"synthetic\",\"negativeExample\":-3.75,\"packetLossThreshold\":2.5,\"port\":443,\"timeoutSeconds\":30}",
+  "sha256": "80fec5c40479c8332ccdd56983043b93416a3be16b261d211ddfe64b6035e0f1",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "2fvYNfL9Iove1PWV8o9kizRRXN+Q9OicUOOiX8tBKmZNM5Itbk7hNR08rh7vB+dmsV/3kmLRtN1IS323DBioAQ==",
+  "expectedVerification": "VALID"
+}

@@ -27,17 +27,17 @@ does not open a shell or administrative connection to an agent.
 
 Job envelopes contain only a module identity, an Authorized Scope-derived
 target and schema-validated parameters. They never contain shell commands, raw
-CLI strings or arbitrary arguments. Ed25519 signing fields are reserved in v1,
-but signing is not active until a deployment configures a protected private key
-and distributes its public trust key during enrollment. mTLS and database-backed
+CLI strings or arbitrary arguments. Ed25519 signing is activated when a
+deployment configures a protected private key and distributes its public trust
+key during enrollment. mTLS and database-backed
 authorization remain mandatory regardless of envelope signing.
 
 Signed deployments set the optional triplet `signingKeyId`,
 `signatureAlgorithm=Ed25519` and `signature`; the Agent selects only the named
-trusted key. NetScope Canonical JSON v1 signs a deterministic object containing
+trusted key. RFC 8785 JCS signs a deterministic object containing
 the security-relevant envelope fields documented in `docs/job-signing.md`.
-Object keys use lexical order, arrays retain order, strings use JSON escaping
-and insignificant whitespace is removed. The checked-in TEST ONLY vectors are
+Object keys use UTF-16 order, arrays retain order, Unicode is preserved, finite
+decimal numbers use ECMAScript serialization and insignificant whitespace is removed. The checked-in TEST ONLY vectors are
 the cross-repository authority for canonical bytes, SHA-256 and signature.
 
 ## Retry and idempotency

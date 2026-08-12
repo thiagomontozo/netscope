@@ -1,0 +1,19 @@
+{
+  "name": "nested-object",
+  "input": {
+    "z": {
+      "second": 2,
+      "first": 1
+    },
+    "a": {
+      "nested": true
+    }
+  },
+  "canonical": "{\"a\":{\"nested\":true},\"z\":{\"first\":1,\"second\":2}}",
+  "sha256": "041576848c42e51e7722de3afbd4eee164c406d51dfc04c5c1ede80cfbfe5917",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "NjhFH4WAKCLzXKQXT14qMdEeCti8+GEHMOdLr23htrOXYynRsOq3/q18H1j7qiP0qslE4W41s4SwVmkFLxEyCA==",
+  "expectedVerification": "VALID"
+}

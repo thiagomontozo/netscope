@@ -56,3 +56,23 @@ func TestEd25519Vector(t *testing.T) {
 		t.Fatalf("signature vector changed: %s", signature)
 	}
 }
+
+func TestDecimalJobEnvelopeSigningRegression(t *testing.T) {
+	envelope := testEnvelope()
+	envelope.ValidatedParameters = []byte(`{"port":443,"packetLossThreshold":2.5,"latencyMultiplier":1.25,"negativeExample":-3.75}`)
+	seed, _ := hex.DecodeString("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+	private := ed25519.NewKeyFromSeed(seed)
+	signer := &Ed25519Signer{keyID: "test-only-2026-08", private: private}
+	signature, err := signer.Sign(context.Background(), envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := CanonicalJobPayload(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, _ := base64.StdEncoding.DecodeString(signature)
+	if !ed25519.Verify(private.Public().(ed25519.PublicKey), payload, decoded) {
+		t.Fatal("decimal JobEnvelope signature did not verify")
+	}
+}

@@ -1,0 +1,33 @@
+{
+  "name": "job-envelope-basic",
+  "input": {
+    "agentId": "11111111-1111-4111-8111-111111111111",
+    "authorizationReference": "test-only:fixture",
+    "expiresAt": "2026-08-11T12:05:00Z",
+    "issuedAt": "2026-08-11T12:00:00Z",
+    "jobId": "33333333-3333-4333-8333-333333333333",
+    "moduleId": "mock.safe",
+    "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "organizationId": "22222222-2222-4222-8222-222222222222",
+    "protocolVersion": "1.0",
+    "riskClass": "PASSIVE",
+    "scopeEnvironment": "INTERNAL",
+    "scopeId": "44444444-4444-4444-8444-444444444444",
+    "target": {
+      "type": "HOSTNAME",
+      "value": "fixture.test.invalid"
+    },
+    "timeoutSeconds": 30,
+    "validatedParameters": {
+      "mode": "synthetic",
+      "port": 443
+    }
+  },
+  "canonical": "{\"agentId\":\"11111111-1111-4111-8111-111111111111\",\"authorizationReference\":\"test-only:fixture\",\"expiresAt\":\"2026-08-11T12:05:00Z\",\"issuedAt\":\"2026-08-11T12:00:00Z\",\"jobId\":\"33333333-3333-4333-8333-333333333333\",\"moduleId\":\"mock.safe\",\"nonce\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"organizationId\":\"22222222-2222-4222-8222-222222222222\",\"protocolVersion\":\"1.0\",\"riskClass\":\"PASSIVE\",\"scopeEnvironment\":\"INTERNAL\",\"scopeId\":\"44444444-4444-4444-8444-444444444444\",\"target\":{\"type\":\"HOSTNAME\",\"value\":\"fixture.test.invalid\"},\"timeoutSeconds\":30,\"validatedParameters\":{\"mode\":\"synthetic\",\"port\":443}}",
+  "sha256": "1136f87a7aff96298ea2369f80c596570824d3748db3081dfb83efe70346ad81",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "cMPzjzE6HdI76IOqhtsKmaScut5yW57bUXEQCIt6esxGqha8UvHaRKRe0dqvIM2wxwNxx74IxqkS8pMxCk+TDg==",
+  "expectedVerification": "VALID"
+}

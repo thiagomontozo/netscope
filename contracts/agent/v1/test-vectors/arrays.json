@@ -1,0 +1,22 @@
+{
+  "name": "arrays",
+  "input": {
+    "values": [
+      3,
+      2.5,
+      -3.75,
+      0,
+      {
+        "b": 2,
+        "a": 1
+      }
+    ]
+  },
+  "canonical": "{\"values\":[3,2.5,-3.75,0,{\"a\":1,\"b\":2}]}",
+  "sha256": "771f0b368427e88a99590f12bda98039c5bb1f5f0e7ecb727323f8724549b998",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "FSxTc6qLJ3W0czCuTdgT/lTCfTa51GhJvo0Ob2bYaWIyys14DUSHF65jvaAPrkCgMj9DD0Vx5sv/KG52n3l5Cw==",
+  "expectedVerification": "VALID"
+}

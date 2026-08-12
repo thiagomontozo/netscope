@@ -1,0 +1,13 @@
+{
+  "name": "negative-number",
+  "input": {
+    "negativeExample": -3.75
+  },
+  "canonical": "{\"negativeExample\":-3.75}",
+  "sha256": "2dfbc41ecc231645cc482530d975cd3b53758ebd22e42c4f52f2173c779b394f",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "XpTxkEyY3Wd5/FTQV2OjCo35hfGShxGd3VomW+5T4rAS5Cc9irA9HX2IggcgMs6DDSx4aMfVWx5v1d9ITCayCw==",
+  "expectedVerification": "VALID"
+}

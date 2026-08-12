@@ -1,0 +1,14 @@
+{
+  "name": "decimal",
+  "input": {
+    "packetLossThreshold": 2.5,
+    "latencyMultiplier": 1.25
+  },
+  "canonical": "{\"latencyMultiplier\":1.25,\"packetLossThreshold\":2.5}",
+  "sha256": "91a94b250ec5cf7645dd79eb89df49bcb675831e83d6f2dd33a5526d79feddbb",
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "test-only-2026-08",
+  "testPublicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "ump9fbc9p3oY/fqr4pBkLRHYI6pUqoqg7QkF3JlTQxQQ4j+wrNBgqKh4I6EX0v0zejDinRchzngUq3ET3wflCw==",
+  "expectedVerification": "VALID"
+}
