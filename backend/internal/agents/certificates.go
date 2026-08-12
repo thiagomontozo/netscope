@@ -45,7 +45,9 @@ func (s RotationService) Request(ctx context.Context, organizationID, agentID do
 	if err != nil {
 		return RotationResult{}, err
 	}
-	if _,err=tx.Exec(ctx,`UPDATE agent_certificates SET status='REVOKED',revoked_at=now() WHERE organization_id=$1 AND agent_id=$2 AND status='ROTATING'`,organizationID,agentID);err!=nil{return RotationResult{},err}
+	if _, err = tx.Exec(ctx, `UPDATE agent_certificates SET status='REVOKED',revoked_at=now() WHERE organization_id=$1 AND agent_id=$2 AND status='ROTATING'`, organizationID, agentID); err != nil {
+		return RotationResult{}, err
+	}
 	var certificateID domain.ID
 	err = tx.QueryRow(ctx, `INSERT INTO agent_certificates(organization_id,agent_id,serial_number,fingerprint,not_before,not_after,status) VALUES($1,$2,$3,$4,now()-interval '5 minutes',$5,'ROTATING') RETURNING id::text`, organizationID, agentID, serial, fingerprint, expires).Scan(&certificateID)
 	if err != nil {

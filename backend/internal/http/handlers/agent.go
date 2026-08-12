@@ -82,7 +82,10 @@ func (h Agent) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusBadRequest, "PROTOCOL_INCOMPATIBLE", "heartbeat protocol or agent identity is incompatible")
 		return
 	}
-	if input.ContractVersion!=""&&agents.RequireCompatible(input.ContractVersion)!=nil||input.CapabilitySchemaVersion!=""&&agents.RequireCompatible(input.CapabilitySchemaVersion)!=nil { middleware.WriteError(w,r,http.StatusBadRequest,"PROTOCOL_INCOMPATIBLE","contract or capability schema major version is incompatible");return }
+	if input.ContractVersion != "" && agents.RequireCompatible(input.ContractVersion) != nil || input.CapabilitySchemaVersion != "" && agents.RequireCompatible(input.CapabilitySchemaVersion) != nil {
+		middleware.WriteError(w, r, http.StatusBadRequest, "PROTOCOL_INCOMPATIBLE", "contract or capability schema major version is incompatible")
+		return
+	}
 	if (input.Status != "ONLINE" && input.Status != "DEGRADED") || input.RunningJobs < 0 || input.AvailableSlots < 0 || len(input.CapabilitiesHash) != 64 {
 		middleware.WriteError(w, r, http.StatusBadRequest, "HEARTBEAT_INVALID", "heartbeat state, slots or capabilities hash is invalid")
 		return

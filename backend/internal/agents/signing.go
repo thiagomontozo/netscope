@@ -150,8 +150,12 @@ func writeCanonical(output *bytes.Buffer, value any) error {
 	case int:
 		output.WriteString(strconv.Itoa(typed))
 	case json.Number:
-		if strings.ContainsAny(string(typed), ".eE") { return errors.New("signed job parameters must use integer JSON numbers") }
-		if _, err := strconv.ParseInt(string(typed),10,64); err != nil { return errors.New("invalid signed job integer") }
+		if strings.ContainsAny(string(typed), ".eE") {
+			return errors.New("signed job parameters must use integer JSON numbers")
+		}
+		if _, err := strconv.ParseInt(string(typed), 10, 64); err != nil {
+			return errors.New("invalid signed job integer")
+		}
 		output.WriteString(string(typed))
 	case []any:
 		output.WriteByte('[')
