@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -92,8 +93,33 @@ func TestArtifactEvidenceObservationTransactionAndIdempotency(t *testing.T) {
 		t.Fatalf("happy path returned %d", status)
 	}
 	assertCounts(t, pool, jobID, 1, 1, 1, "SUCCEEDED")
+	var completionMetadata string
+	if err := pool.QueryRow(context.Background(), `SELECT metadata::text FROM audit_events WHERE organization_id=$1 AND resource_id=$2 AND event_type='job.completed'`, testOrg, jobID).Scan(&completionMetadata); err != nil {
+		t.Fatal(err)
+	}
+	var completion map[string]any
+	if err := json.Unmarshal([]byte(completionMetadata), &completion); err != nil || completion["observations"] != float64(1) || completion["evidence"] != float64(1) || completion["resultIdentity"] != "result-"+jobID || completion["truncated"] != false {
+		t.Fatalf("unexpected job.completed metadata %q err=%v", completionMetadata, err)
+	}
 	if status := postResult(t, router, jobID, payload); status != http.StatusNoContent {
 		t.Fatalf("idempotent retry returned %d", status)
+	}
+	assertCounts(t, pool, jobID, 1, 1, 1, "SUCCEEDED")
+	var retries sync.WaitGroup
+	retryStatuses := make(chan int, 2)
+	for range 2 {
+		retries.Add(1)
+		go func() {
+			defer retries.Done()
+			retryStatuses <- postResult(t, router, jobID, payload)
+		}()
+	}
+	retries.Wait()
+	close(retryStatuses)
+	for status := range retryStatuses {
+		if status != http.StatusNoContent {
+			t.Fatalf("concurrent idempotent retry returned %d", status)
+		}
 	}
 	assertCounts(t, pool, jobID, 1, 1, 1, "SUCCEEDED")
 
@@ -127,7 +153,7 @@ func TestArtifactEvidenceObservationTransactionAndIdempotency(t *testing.T) {
 	}
 	var artifactStatus string
 	var checksumAudits int
-	if err := pool.QueryRow(context.Background(), `SELECT status::text,(SELECT count(*) FROM audit_events WHERE resource_id=$1 AND event_type='artifact.checksum_failed') FROM artifacts WHERE id=$1`, checksumArtifact).Scan(&artifactStatus, &checksumAudits); err != nil || artifactStatus != "FAILED" || checksumAudits != 1 {
+	if err := pool.QueryRow(context.Background(), `SELECT status::text,(SELECT count(*) FROM audit_events WHERE resource_id=$1::text AND event_type='artifact.checksum_failed') FROM artifacts WHERE id=$1::uuid`, checksumArtifact).Scan(&artifactStatus, &checksumAudits); err != nil || artifactStatus != "FAILED" || checksumAudits != 1 {
 		t.Fatalf("checksum failure state=%s audits=%d err=%v", artifactStatus, checksumAudits, err)
 	}
 	assertCounts(t, pool, checksumJob, 0, 0, 0, "RUNNING")
@@ -145,6 +171,25 @@ func TestArtifactEvidenceObservationTransactionAndIdempotency(t *testing.T) {
 		t.Fatalf("transactional relationship failure returned %d", status)
 	}
 	assertCounts(t, pool, transactionJob, 0, 0, 0, "RUNNING")
+
+	auditJob := "18181818-1818-4818-8818-181818181818"
+	auditArtifact := "19191919-1919-4919-8919-191919191919"
+	auditEvidence := "20202020-2020-4020-8020-202020202020"
+	insertJobAndArtifact(t, pool, auditJob, auditArtifact, "AVAILABLE", checksum, int64(len(artifactContent)), testOrg)
+	if _, err := pool.Exec(context.Background(), `CREATE FUNCTION netscope_test_reject_job_completed() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.event_type='job.completed' AND NEW.resource_id='18181818-1818-4818-8818-181818181818' THEN RAISE EXCEPTION 'TEST ONLY audit failure'; END IF; RETURN NEW; END $$`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `CREATE TRIGGER netscope_test_reject_job_completed BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION netscope_test_reject_job_completed()`); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS netscope_test_reject_job_completed ON audit_events`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS netscope_test_reject_job_completed()`)
+	}()
+	if status := postResult(t, router, auditJob, resultPayload(auditJob, auditArtifact, auditEvidence, checksum, int64(len(artifactContent)))); status != http.StatusInternalServerError {
+		t.Fatalf("audit failure returned %d", status)
+	}
+	assertCounts(t, pool, auditJob, 0, 0, 0, "RUNNING")
 }
 
 func TestCertificateRotationSuccessAndRollback(t *testing.T) {
