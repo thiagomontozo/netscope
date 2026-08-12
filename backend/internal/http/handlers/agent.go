@@ -380,7 +380,7 @@ func (h Agent) Result(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusInternalServerError, "RESULT_IMPORT_FAILED", "job result state could not be stored")
 		return
 	}
-	_, err = tx.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,'job.completed','job',$3,'success',jsonb_build_object('observations',$4,'evidence',$5,'resultIdentity',$6,'truncated',$7))`, org, agent, id, len(input.Observations), len(input.EvidenceManifest), input.ResultIdentity, input.Truncated)
+	_, err = tx.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,'job.completed','job',$3,'success',jsonb_build_object('observations',$4::integer,'evidence',$5::integer,'resultIdentity',$6::text,'truncated',$7::boolean))`, org, agent, id, len(input.Observations), len(input.EvidenceManifest), input.ResultIdentity, input.Truncated)
 	if err != nil {
 		middleware.WriteError(w, r, http.StatusInternalServerError, "RESULT_IMPORT_FAILED", "job result audit event could not be stored")
 		return
