@@ -17,7 +17,41 @@ import (
 	"github.com/thiagomontozo/netscope/backend/internal/http/middleware"
 )
 
-type Agent struct{ Enrollment agents.EnrollmentService }
+type Agent struct {
+	Enrollment        agents.EnrollmentService
+	Signer            agents.JobEnvelopeSigner
+	RequireSignedJobs bool
+	Rotation          agents.RotationService
+}
+
+func (h Agent) RotateIdentity(w http.ResponseWriter, r *http.Request) {
+	input, ok := decode[struct {
+		CSRPEM string `json:"csrPem"`
+	}](w, r, 128<<10)
+	if !ok {
+		return
+	}
+	result, err := h.Rotation.Request(r.Context(), middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), input.CSRPEM)
+	if err != nil {
+		middleware.WriteError(w, r, http.StatusBadRequest, "CERTIFICATE_ROTATION_INVALID", "certificate rotation request was rejected")
+		return
+	}
+	middleware.JSON(w, http.StatusCreated, map[string]any{"data": result})
+}
+
+func (h Agent) ConfirmIdentityRotation(w http.ResponseWriter, r *http.Request) {
+	input, ok := decode[struct {
+		CertificateID domain.ID `json:"certificateId"`
+	}](w, r, 16<<10)
+	if !ok {
+		return
+	}
+	if err := h.Rotation.Confirm(r.Context(), middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), input.CertificateID); err != nil {
+		middleware.WriteError(w, r, http.StatusConflict, "CERTIFICATE_ROTATION_CONFIRM_INVALID", "certificate rotation confirmation was rejected")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func (h Agent) Enroll(w http.ResponseWriter, r *http.Request) {
 	var input agents.EnrollmentRequest
@@ -48,6 +82,7 @@ func (h Agent) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusBadRequest, "PROTOCOL_INCOMPATIBLE", "heartbeat protocol or agent identity is incompatible")
 		return
 	}
+	if input.ContractVersion!=""&&agents.RequireCompatible(input.ContractVersion)!=nil||input.CapabilitySchemaVersion!=""&&agents.RequireCompatible(input.CapabilitySchemaVersion)!=nil { middleware.WriteError(w,r,http.StatusBadRequest,"PROTOCOL_INCOMPATIBLE","contract or capability schema major version is incompatible");return }
 	if (input.Status != "ONLINE" && input.Status != "DEGRADED") || input.RunningJobs < 0 || input.AvailableSlots < 0 || len(input.CapabilitiesHash) != 64 {
 		middleware.WriteError(w, r, http.StatusBadRequest, "HEARTBEAT_INVALID", "heartbeat state, slots or capabilities hash is invalid")
 		return
@@ -62,7 +97,15 @@ func (h Agent) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	compatibility := agents.Compatibility(input.ProtocolVersion)
-	tag, err := h.Enrollment.Pool.Exec(r.Context(), `UPDATE agents SET last_seen_at=now(),status='ONLINE',version=$3,hostname=$4,os=$5,arch=$6,protocol_version=$7,compatibility_status=$8,running_jobs=$9,available_slots=$10,capabilities_hash=NULLIF($11,''),health_summary=$12 WHERE organization_id=$1 AND id=$2 AND status<>'REVOKED'`, org, agentID, input.AgentVersion, input.Hostname, input.OS, input.Architecture, input.ProtocolVersion, compatibility, input.RunningJobs, input.AvailableSlots, input.CapabilitiesHash, health)
+	contractVersion := input.ContractVersion
+	if contractVersion == "" {
+		contractVersion = "1.0"
+	}
+	capabilitySchema := input.CapabilitySchemaVersion
+	if capabilitySchema == "" {
+		capabilitySchema = "1.0"
+	}
+	tag, err := h.Enrollment.Pool.Exec(r.Context(), `UPDATE agents SET last_seen_at=now(),status='ONLINE',version=$3,hostname=$4,os=$5,arch=$6,protocol_version=$7,compatibility_status=$8,running_jobs=$9,available_slots=$10,capabilities_hash=NULLIF($11,''),health_summary=$12,contract_version=$13,capability_schema_version=$14 WHERE organization_id=$1 AND id=$2 AND status<>'REVOKED'`, org, agentID, input.AgentVersion, input.Hostname, input.OS, input.Architecture, input.ProtocolVersion, compatibility, input.RunningJobs, input.AvailableSlots, input.CapabilitiesHash, health, contractVersion, capabilitySchema)
 	if err != nil || tag.RowsAffected() != 1 {
 		middleware.WriteError(w, r, http.StatusUnauthorized, "HEARTBEAT_REJECTED", "agent is no longer active")
 		return
@@ -112,7 +155,19 @@ func (h Agent) NextJob(w http.ResponseWriter, r *http.Request) {
 		envelope.TimeoutSeconds = 1
 	}
 	envelope.Nonce = hex.EncodeToString(nonce)
-	tag, err := tx.Exec(r.Context(), `UPDATE analysis_jobs SET status='ASSIGNED',status_version=status_version+1 WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status='QUEUED'`, envelope.OrganizationID, envelope.AgentID, envelope.JobID)
+	if h.Signer != nil {
+		envelope.SigningKeyID = h.Signer.KeyID()
+		envelope.SignatureAlgorithm = h.Signer.Algorithm()
+		envelope.Signature, err = h.Signer.Sign(r.Context(), envelope)
+		if err != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "JOB_SIGNING_FAILED", "job could not be signed")
+			return
+		}
+	} else if h.RequireSignedJobs {
+		middleware.WriteError(w, r, http.StatusServiceUnavailable, "JOB_SIGNING_UNAVAILABLE", "signed job policy is active but no signing key is available")
+		return
+	}
+	tag, err := tx.Exec(r.Context(), `WITH changed AS (UPDATE analysis_jobs SET status='ASSIGNED',status_version=status_version+1,signing_key_id=NULLIF($4,''),signature_algorithm=NULLIF($5,''),signature=NULLIF($6,''),signature_issued_at=CASE WHEN $6<>'' THEN now() END WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status='QUEUED' RETURNING id) INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) SELECT $1,$2,CASE WHEN $6<>'' THEN 'job.signed' ELSE 'job.assigned_unsigned' END,'job',id::text,'success',jsonb_build_object('signingKeyId',NULLIF($4,''),'signatureAlgorithm',NULLIF($5,'')) FROM changed`, envelope.OrganizationID, envelope.AgentID, envelope.JobID, envelope.SigningKeyID, envelope.SignatureAlgorithm, envelope.Signature)
 	if err != nil || tag.RowsAffected() != 1 {
 		middleware.WriteError(w, r, http.StatusConflict, "JOB_ASSIGNMENT_RACE", "job assignment changed concurrently")
 		return
@@ -323,7 +378,7 @@ func (h Agent) Fail(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusBadRequest, "FAILURE_INVALID", "failure code or summary is invalid")
 		return
 	}
-	tag, err := h.Enrollment.Pool.Exec(r.Context(), `WITH changed AS (UPDATE analysis_jobs SET status='FAILED',completed_at=now(),status_version=status_version+1,rejection_code=$4 WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status IN ('ASSIGNED','RUNNING') RETURNING id) INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) SELECT $1,$2,'job.completed','job',id::text,'failed',jsonb_build_object('code',$4,'summary',$5) FROM changed`, middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), id, input.Code, input.Summary)
+	tag, err := h.Enrollment.Pool.Exec(r.Context(), `WITH changed AS (UPDATE analysis_jobs SET status=CASE $4 WHEN 'CANCELLED' THEN 'CANCELLED' WHEN 'TIMEOUT' THEN 'TIMED_OUT' ELSE 'FAILED' END,completed_at=now(),status_version=status_version+1,rejection_code=$4 WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status IN ('ASSIGNED','RUNNING') RETURNING id) INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) SELECT $1,$2,CASE WHEN $4='SIGNATURE_INVALID' THEN 'job.signature_rejected' WHEN $4='PROTOCOL_INCOMPATIBLE' THEN 'agent.protocol_incompatible' ELSE 'job.completed' END,'job',id::text,'failed',jsonb_build_object('code',$4,'summary',$5) FROM changed`, middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), id, input.Code, input.Summary)
 	if err != nil || tag.RowsAffected() != 1 {
 		middleware.WriteError(w, r, http.StatusConflict, "JOB_STATE_INVALID", "job failure transition was rejected")
 		return

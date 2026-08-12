@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
@@ -111,8 +112,12 @@ type EnrollmentResult struct {
 	OrganizationID       domain.ID `json:"organizationId"`
 	Status               string    `json:"status"`
 	ControlPlaneIdentity struct {
-		CACertificatePEM    string `json:"caCertificatePem"`
-		JobSigningPublicKey string `json:"jobSigningPublicKey,omitempty"`
+		CACertificatePEM         string    `json:"caCertificatePem"`
+		JobSigningKeyID          string    `json:"jobSigningKeyId,omitempty"`
+		JobSigningAlgorithm      string    `json:"jobSigningAlgorithm,omitempty"`
+		JobSigningPublicKey      string    `json:"jobSigningPublicKey,omitempty"`
+		JobSigningKeyFingerprint string    `json:"jobSigningKeyFingerprint,omitempty"`
+		JobSigningKeyIssuedAt    time.Time `json:"jobSigningKeyIssuedAt,omitempty"`
 	} `json:"controlPlaneIdentity"`
 	AgentCredential struct {
 		CertificatePEM string    `json:"certificatePem"`
@@ -121,8 +126,9 @@ type EnrollmentResult struct {
 	ServerTime time.Time `json:"serverTime"`
 }
 type EnrollmentService struct {
-	Pool *pgxpool.Pool
-	CA   *CertificateAuthority
+	Pool   *pgxpool.Pool
+	CA     *CertificateAuthority
+	Signer JobEnvelopeSigner
 }
 
 func (s EnrollmentService) Enroll(ctx context.Context, in EnrollmentRequest) (EnrollmentResult, error) {
@@ -164,7 +170,15 @@ func (s EnrollmentService) Enroll(ctx context.Context, in EnrollmentRequest) (En
 	if err != nil {
 		return EnrollmentResult{}, err
 	}
-	_, err = tx.Exec(ctx, `UPDATE agents SET status='ONLINE',identity_fingerprint=$3,certificate_serial=$4,certificate_expires_at=$5,last_seen_at=now() WHERE organization_id=$1 AND id=$2`, org, agentID, fingerprint, serial, expires)
+	signingKeyID := ""
+	if s.Signer != nil {
+		signingKeyID = s.Signer.KeyID()
+	}
+	_, err = tx.Exec(ctx, `UPDATE agents SET status='ONLINE',identity_fingerprint=$3,certificate_serial=$4,certificate_expires_at=$5,last_seen_at=now(),signing_key_id=NULLIF($6,'') WHERE organization_id=$1 AND id=$2`, org, agentID, fingerprint, serial, expires, signingKeyID)
+	if err != nil {
+		return EnrollmentResult{}, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO agent_certificates(organization_id,agent_id,serial_number,fingerprint,not_before,not_after,status) VALUES($1,$2,$3,$4,now()-interval '5 minutes',$5,'ACTIVE')`, org, agentID, serial, fingerprint, expires)
 	if err != nil {
 		return EnrollmentResult{}, err
 	}
@@ -181,6 +195,13 @@ func (s EnrollmentService) Enroll(ctx context.Context, in EnrollmentRequest) (En
 	}
 	result := EnrollmentResult{ProtocolVersion: domain.AgentProtocolVersion, AgentID: agentID, OrganizationID: org, Status: "ONLINE", ServerTime: time.Now().UTC()}
 	result.ControlPlaneIdentity.CACertificatePEM = string(s.CA.CertificatePEM)
+	if s.Signer != nil {
+		result.ControlPlaneIdentity.JobSigningKeyID = s.Signer.KeyID()
+		result.ControlPlaneIdentity.JobSigningAlgorithm = s.Signer.Algorithm()
+		result.ControlPlaneIdentity.JobSigningPublicKey = base64.StdEncoding.EncodeToString(s.Signer.PublicKey())
+		result.ControlPlaneIdentity.JobSigningKeyFingerprint = s.Signer.Fingerprint()
+		result.ControlPlaneIdentity.JobSigningKeyIssuedAt = s.Signer.IssuedAt()
+	}
 	result.AgentCredential.CertificatePEM = string(cert)
 	result.AgentCredential.ExpiresAt = expires
 	return result, nil

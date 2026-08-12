@@ -14,19 +14,21 @@ import (
 )
 
 type heartbeatRequest struct {
-	ProtocolVersion  string         `json:"protocolVersion"`
-	AgentID          domain.ID      `json:"agentId"`
-	AgentVersion     string         `json:"agentVersion"`
-	Timestamp        time.Time      `json:"timestamp"`
-	Hostname         string         `json:"hostname"`
-	OS               string         `json:"os"`
-	Architecture     string         `json:"architecture"`
-	Status           string         `json:"status"`
-	RunningJobs      int            `json:"runningJobs"`
-	AvailableSlots   int            `json:"availableSlots"`
-	CapabilitiesHash string         `json:"capabilitiesHash"`
-	HealthSummary    map[string]any `json:"healthSummary"`
-	LastJobResult    *struct {
+	ProtocolVersion         string         `json:"protocolVersion"`
+	AgentID                 domain.ID      `json:"agentId"`
+	AgentVersion            string         `json:"agentVersion"`
+	ContractVersion         string         `json:"contractVersion,omitempty"`
+	CapabilitySchemaVersion string         `json:"capabilitySchemaVersion,omitempty"`
+	Timestamp               time.Time      `json:"timestamp"`
+	Hostname                string         `json:"hostname"`
+	OS                      string         `json:"os"`
+	Architecture            string         `json:"architecture"`
+	Status                  string         `json:"status"`
+	RunningJobs             int            `json:"runningJobs"`
+	AvailableSlots          int            `json:"availableSlots"`
+	CapabilitiesHash        string         `json:"capabilitiesHash"`
+	HealthSummary           map[string]any `json:"healthSummary"`
+	LastJobResult           *struct {
 		JobID       domain.ID `json:"jobId"`
 		Status      string    `json:"status"`
 		CompletedAt time.Time `json:"completedAt"`

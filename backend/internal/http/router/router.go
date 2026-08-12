@@ -4,6 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/thiagomontozo/netscope/backend/internal/agents"
+	"github.com/thiagomontozo/netscope/backend/internal/artifacts"
 	"github.com/thiagomontozo/netscope/backend/internal/auth"
 	"github.com/thiagomontozo/netscope/backend/internal/database"
 	"github.com/thiagomontozo/netscope/backend/internal/http/handlers"
@@ -15,17 +16,24 @@ import (
 	"github.com/thiagomontozo/netscope/backend/internal/vulnerabilities"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 type Runtime struct {
-	Store         database.ControlPlane
-	Auth          auth.Service
-	Enrollment    agents.EnrollmentService
-	Storage       storage.ObjectStorage
-	NVD           vulnerabilities.VulnerabilityEnrichmentProvider
-	KEV           vulnerabilities.KnownExploitedProvider
-	Production    bool
-	MaxConcurrent int
+	Store                    database.ControlPlane
+	Auth                     auth.Service
+	Enrollment               agents.EnrollmentService
+	Storage                  storage.ObjectStorage
+	NVD                      vulnerabilities.VulnerabilityEnrichmentProvider
+	KEV                      vulnerabilities.KnownExploitedProvider
+	Production               bool
+	MaxConcurrent            int
+	JobSigner                agents.JobEnvelopeSigner
+	RequireSignedJobs        bool
+	ArtifactTokens           artifacts.TokenManager
+	MaxArtifactDownloadBytes int64
+	MaxArtifactUploadBytes   int64
+	ArtifactTempDir          string
 }
 
 func New(logger *slog.Logger, registry *modules.Registry, runtime Runtime) http.Handler {
@@ -89,7 +97,7 @@ func New(logger *slog.Logger, registry *modules.Registry, runtime Runtime) http.
 		enrichmentHandler := handlers.Enrichment{Pool: runtime.Store.Pool, NVD: runtime.NVD, KEV: runtime.KEV, Policy: runtime.Store}
 		api.Post("/vulnerabilities/{id}/enrich", enrichmentHandler.Run)
 		resources := database.Resources{Pool: runtime.Store.Pool}
-		for _, resource := range []string{"users", "roles", "permissions", "assets", "services", "public-exposure", "scopes", "agents", "vantage-points", "jobs", "diagnostic-runs", "schedules", "observations", "findings", "evidence", "incidents", "incident-events", "incident-reports", "route-snapshots", "route-comparisons", "monitor-history", "baselines", "changes", "vulnerabilities", "traffic", "pcap", "reports", "notifications", "audit"} {
+		for _, resource := range []string{"users", "roles", "permissions", "assets", "services", "public-exposure", "scopes", "agents", "vantage-points", "jobs", "artifacts", "diagnostic-runs", "schedules", "observations", "findings", "evidence", "incidents", "incident-events", "incident-reports", "route-snapshots", "route-comparisons", "monitor-history", "baselines", "changes", "vulnerabilities", "traffic", "pcap", "reports", "notifications", "audit"} {
 			path := "/" + resource
 			handler := handlers.Resources{Store: resources, Resource: resource, Policy: runtime.Store}
 			api.Get(path, handler.List)
@@ -97,20 +105,27 @@ func New(logger *slog.Logger, registry *modules.Registry, runtime Runtime) http.
 		}
 		api.Get("/events", events)
 	})
-	agentHandler := handlers.Agent{Enrollment: runtime.Enrollment}
-	r.Post("/agent/v1/enroll", agentHandler.Enroll)
+	agentHandler := handlers.Agent{Enrollment: runtime.Enrollment, Signer: runtime.JobSigner, RequireSignedJobs: runtime.RequireSignedJobs, Rotation: agents.RotationService{Pool: runtime.Store.Pool, CA: runtime.Enrollment.CA, Policy: agents.DefaultCertificatePolicy()}}
+	r.With(appmw.RateLimit(10, time.Minute)).Post("/agent/v1/enroll", agentHandler.Enroll)
 	r.Route("/agent/v1", func(agent chi.Router) {
 		agent.Use(appmw.AgentIdentity(runtime.Store))
 		h := agentHandler
 		agent.Post("/heartbeat", h.Heartbeat)
 		agent.Post("/capabilities", h.Capabilities)
 		agent.Post("/evidence", h.Evidence)
+		agent.With(appmw.RateLimit(6, time.Minute)).Post("/identity/rotate", h.RotateIdentity)
+		agent.With(appmw.RateLimit(12, time.Minute)).Post("/identity/rotate/confirm", h.ConfirmIdentityRotation)
 		agent.MethodFunc(http.MethodGet, "/jobs/next", h.NextJob)
 		agent.MethodFunc(http.MethodPost, "/jobs/next", h.NextJob)
 		agent.Post("/jobs/{id}/start", h.StartJob)
 		agent.Post("/jobs/{id}/result", h.Result)
 		agent.Post("/jobs/{id}/fail", h.Fail)
 		agent.Get("/jobs/{id}/cancellation", h.Cancellation)
+		artifactHandler := handlers.AgentArtifacts{Pool: runtime.Store.Pool, Storage: runtime.Storage, Tokens: runtime.ArtifactTokens, MaxDownloadBytes: runtime.MaxArtifactDownloadBytes, MaxUploadBytes: runtime.MaxArtifactUploadBytes, TempDir: runtime.ArtifactTempDir}
+		agent.Post("/artifacts", artifactHandler.Create)
+		agent.With(appmw.RateLimit(120, time.Minute)).Post("/artifacts/{id}/authorize", artifactHandler.Authorize)
+		agent.Get("/artifacts/{id}/content", artifactHandler.Download)
+		agent.Put("/artifacts/{id}/content", artifactHandler.Upload)
 	})
 	return r
 }

@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"github.com/thiagomontozo/netscope/backend/internal/agents"
+	"github.com/thiagomontozo/netscope/backend/internal/artifacts"
 	"github.com/thiagomontozo/netscope/backend/internal/auth"
 	"github.com/thiagomontozo/netscope/backend/internal/config"
 	"github.com/thiagomontozo/netscope/backend/internal/database"
@@ -56,6 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 	var certificateAuthority *agents.CertificateAuthority
+	var jobSigner agents.JobEnvelopeSigner
 	if cfg.AgentCACertificateFile != "" {
 		certificateAuthority, err = agents.LoadCertificateAuthority(cfg.AgentCACertificateFile, cfg.AgentCAKeyFile)
 		if err != nil {
@@ -63,9 +67,18 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if cfg.JobSigningKeyFile != "" {
+		jobSigner, err = agents.LoadEd25519Signer(cfg.JobSigningKeyFile, cfg.JobSigningKeyID)
+		if err != nil {
+			logger.Error("job signing key unavailable", "error", err)
+			os.Exit(1)
+		}
+	}
 	nvdProvider := vulnerabilities.NVDProvider{APIKey: cfg.NVDAPIKey}
 	kevProvider := &vulnerabilities.CISAKEVProvider{CatalogURL: cfg.CISAKEVCatalogURL}
-	runtime := router.Runtime{Store: store, Auth: auth.Service{Pool: pool, SessionTTL: cfg.SessionTTL, MasterKey: []byte(cfg.MasterKey)}, Enrollment: agents.EnrollmentService{Pool: pool, CA: certificateAuthority}, Storage: objectStorage, NVD: nvdProvider, KEV: kevProvider, Production: cfg.Environment == "production", MaxConcurrent: cfg.MaxConcurrentJobs}
+	artifactTokenKey := sha256.Sum256([]byte(cfg.MasterKey + ":artifact-transfer"))
+	if len(cfg.MasterKey)<32 { if _,err:=rand.Read(artifactTokenKey[:]);err!=nil{logger.Error("artifact token key generation failed","error",err);os.Exit(1)} }
+	runtime := router.Runtime{Store: store, Auth: auth.Service{Pool: pool, SessionTTL: cfg.SessionTTL, MasterKey: []byte(cfg.MasterKey)}, Enrollment: agents.EnrollmentService{Pool: pool, CA: certificateAuthority, Signer: jobSigner}, Storage: objectStorage, NVD: nvdProvider, KEV: kevProvider, Production: cfg.Environment == "production", MaxConcurrent: cfg.MaxConcurrentJobs, JobSigner: jobSigner, RequireSignedJobs: cfg.RequireSignedJobs, ArtifactTokens: artifacts.TokenManager{Key: artifactTokenKey[:], TTL: cfg.ArtifactTokenTTL}, MaxArtifactDownloadBytes: cfg.MaxArtifactDownloadBytes, MaxArtifactUploadBytes: cfg.MaxArtifactUploadBytes, ArtifactTempDir: os.TempDir()}
 	server := &http.Server{Addr: cfg.Address, Handler: router.New(logger, registry, runtime), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
 	if cfg.AgentCACertificateFile != "" {
 		caPEM, readErr := os.ReadFile(cfg.AgentCACertificateFile)

@@ -159,14 +159,27 @@ func (c Commands) CreateEnrollmentToken(ctx context.Context, org, user domain.ID
 	return err
 }
 func (c Commands) RevokeAgent(ctx context.Context, org, user, id domain.ID, requestID string) error {
-	tag, err := c.Pool.Exec(ctx, `UPDATE agents SET status='REVOKED' WHERE organization_id=$1 AND id=$2 AND status<>'REVOKED'`, org, id)
+	tx, err := c.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `UPDATE agents SET status='REVOKED',certificate_rotation_status='IDLE' WHERE organization_id=$1 AND id=$2 AND status<>'REVOKED'`, org, id)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() != 1 {
 		return errors.New("agent not found")
 	}
-	return c.audit(ctx, org, user, "agent.revoked", "agent", id, requestID, "success", nil)
+	_, err = tx.Exec(ctx, `WITH revoked AS (UPDATE agent_certificates SET status='REVOKED',revoked_at=now() WHERE organization_id=$1 AND agent_id=$2 AND status IN ('ACTIVE','ROTATING') RETURNING id) INSERT INTO audit_events(organization_id,actor_user_id,event_type,resource_type,resource_id,request_id,outcome) SELECT $1,$3,'agent.certificate_revoked','agent_certificate',id::text,$4,'success' FROM revoked`, org, id, user, requestID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO audit_events(organization_id,actor_user_id,event_type,resource_type,resource_id,request_id,outcome) VALUES($1,$2,'agent.revoked','agent',$3,$4,'success')`, org, user, id, requestID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 func (c Commands) CreateRole(ctx context.Context, org, user domain.ID, name, requestID string) (domain.ID, error) {
 	var id domain.ID
