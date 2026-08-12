@@ -14,6 +14,13 @@ a private temporary file with a hard byte bound and SHA-256 calculation, become
 and otherwise become `FAILED`. Downloads remain bounded and the Agent performs
 its own streaming checksum before atomically accepting the temporary file.
 
+v0.2.1 calculates SHA-256 while streaming in both directions. Retry resets only
+explicitly failed uploads and never promotes `FAILED` metadata directly to
+`AVAILABLE`. If ObjectStorage succeeds but metadata finalization fails, the
+Control Plane deletes the uncommitted object and marks the transfer failed.
+Partial local files are removed. Evidence may reference an artifact only after
+availability, checksum, size, organization, Agent and job checks all match.
+
 Defaults are 1 GiB upload/download and a five-minute token. Deployments should
 lower limits and content-type policy for their workloads. Multipart resumability
 is deliberately deferred; the domain and state machine permit it later.

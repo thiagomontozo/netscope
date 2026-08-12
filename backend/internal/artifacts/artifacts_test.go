@@ -24,6 +24,16 @@ func TestTransferTokenIsScopedAndExpires(t *testing.T) {
 	if _, err := manager.Verify(token, wrong); err == nil {
 		t.Fatal("cross-agent token was accepted")
 	}
+	wrong = claims
+	wrong.OrganizationID = "org-2"
+	if _, err := manager.Verify(token, wrong); err == nil {
+		t.Fatal("cross-organization token was accepted")
+	}
+	wrong = claims
+	wrong.Purpose = PurposeUpload
+	if _, err := manager.Verify(token, wrong); err == nil {
+		t.Fatal("download token was accepted for upload")
+	}
 	manager.Now = func() time.Time { return now.Add(2 * time.Minute) }
 	if _, err := manager.Verify(token, claims); err == nil {
 		t.Fatal("expired token was accepted")

@@ -46,8 +46,22 @@ func (h Agent) ConfirmIdentityRotation(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.Rotation.Confirm(r.Context(), middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), input.CertificateID); err != nil {
+	if err := h.Rotation.Confirm(r.Context(), middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), input.CertificateID, middleware.AgentFingerprint(r.Context())); err != nil {
 		middleware.WriteError(w, r, http.StatusConflict, "CERTIFICATE_ROTATION_CONFIRM_INVALID", "certificate rotation confirmation was rejected")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h Agent) RollbackIdentityRotation(w http.ResponseWriter, r *http.Request) {
+	input, ok := decode[struct {
+		CertificateID domain.ID `json:"certificateId"`
+	}](w, r, 16<<10)
+	if !ok {
+		return
+	}
+	if err := h.Rotation.Rollback(r.Context(), middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), input.CertificateID); err != nil {
+		middleware.WriteError(w, r, http.StatusConflict, "CERTIFICATE_ROTATION_ROLLBACK_INVALID", "certificate rotation rollback was rejected")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -195,6 +209,7 @@ func (h Agent) transition(w http.ResponseWriter, r *http.Request, from, to, even
 }
 
 type agentObservation struct {
+	EvidenceID      *domain.ID              `json:"evidenceId"`
 	AssetID         *domain.ID              `json:"assetId"`
 	Category        string                  `json:"category"`
 	Status          domain.NormalizedStatus `json:"status"`
@@ -209,6 +224,7 @@ type agentObservation struct {
 }
 type agentEvidence struct {
 	EvidenceID     domain.ID       `json:"evidenceId"`
+	ArtifactID     *domain.ID      `json:"artifactId"`
 	Source         string          `json:"source"`
 	ContentType    string          `json:"contentType"`
 	Summary        string          `json:"summary"`
@@ -302,6 +318,22 @@ func (h Agent) Result(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteError(w, r, http.StatusConflict, "RESULT_IDENTITY_CONFLICT", "result receipt could not be reserved")
 		return
 	}
+	for _, item := range input.EvidenceManifest {
+		if item.EvidenceID == "" || len(item.SHA256) != 64 || item.SizeBytes < 0 || !validJSONObject(item.StructuredData) || len(item.Summary) > 4000 || len(item.ContentType) > 200 || strings.ContainsAny(item.ContentType, "\r\n") {
+			middleware.WriteError(w, r, http.StatusBadRequest, "EVIDENCE_SUMMARY_TOO_LARGE", "evidence summary exceeds policy")
+			return
+		}
+		tag, insertErr := tx.Exec(r.Context(), `INSERT INTO evidence(id,organization_id,job_id,source,content_type,summary,structured_data,checksum,module_id,agent_id,vantage_point_id,artifact_kind,size_bytes,observed_at,artifact_id,storage_key) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,j.vantage_point_id,NULLIF($11,''),$12,$13,a.id,a.storage_key FROM analysis_jobs j LEFT JOIN artifacts a ON a.organization_id=j.organization_id AND a.job_id=j.id AND a.id=$14 AND a.status='AVAILABLE' AND a.sha256=lower($8) AND a.size_bytes=$12 WHERE j.organization_id=$2 AND j.agent_id=$10 AND j.id=$3 AND ($14::uuid IS NULL OR a.id IS NOT NULL)`, item.EvidenceID, org, id, item.Source, item.ContentType, item.Summary, item.StructuredData, item.SHA256, moduleID, agent, item.ArtifactKind, item.SizeBytes, input.CompletedAt, item.ArtifactID)
+		if insertErr != nil || tag.RowsAffected() != 1 {
+			middleware.WriteError(w, r, http.StatusBadRequest, "EVIDENCE_ARTIFACT_INVALID", "evidence artifact is unavailable, unverified or outside the authorized context")
+			return
+		}
+		_, err = tx.Exec(r.Context(), `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$2,'evidence.created','evidence',$3,'success',jsonb_build_object('artifactId',$4::text))`, org, agent, item.EvidenceID, item.ArtifactID)
+		if err != nil {
+			middleware.WriteError(w, r, http.StatusInternalServerError, "EVIDENCE_IMPORT_FAILED", "evidence audit event could not be stored")
+			return
+		}
+	}
 	for _, item := range input.Observations {
 		if item.AssetID != nil && *item.AssetID != jobAssetID {
 			middleware.WriteError(w, r, http.StatusBadRequest, "OBSERVATION_ASSET_INVALID", "observation asset does not match the authorized job")
@@ -311,20 +343,15 @@ func (h Agent) Result(w http.ResponseWriter, r *http.Request) {
 		if item.ObservedAt.IsZero() {
 			item.ObservedAt = time.Now().UTC()
 		}
-		_, err = tx.Exec(r.Context(), `INSERT INTO observations(organization_id,asset_id,module_id,job_id,category,status,severity,confidence,title,summary,meaning,impact,suggested_action,observed_at,evidence_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,0)`, org, item.AssetID, moduleID, id, item.Category, item.Status, item.Severity, item.Confidence, item.Title, item.Summary, item.Meaning, item.Impact, item.SuggestedAction, item.ObservedAt)
+		var observationID domain.ID
+		err = tx.QueryRow(r.Context(), `INSERT INTO observations(organization_id,asset_id,module_id,job_id,category,status,severity,confidence,title,summary,meaning,impact,suggested_action,observed_at,evidence_count,evidence_id) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,CASE WHEN e.id IS NULL THEN 0 ELSE 1 END,e.id FROM (SELECT 1) seed LEFT JOIN evidence e ON e.organization_id=$1 AND e.job_id=$4 AND e.id=$15 WHERE $15::uuid IS NULL OR e.id IS NOT NULL RETURNING id::text`, org, item.AssetID, moduleID, id, item.Category, item.Status, item.Severity, item.Confidence, item.Title, item.Summary, item.Meaning, item.Impact, item.SuggestedAction, item.ObservedAt, item.EvidenceID).Scan(&observationID)
 		if err != nil {
-			middleware.WriteError(w, r, http.StatusBadRequest, "OBSERVATION_IMPORT_FAILED", "normalized observation is invalid")
+			middleware.WriteError(w, r, http.StatusBadRequest, "OBSERVATION_EVIDENCE_INVALID", "observation evidence is missing or outside the authorized context")
 			return
 		}
-	}
-	for _, item := range input.EvidenceManifest {
-		if item.EvidenceID == "" || len(item.SHA256) != 64 || item.SizeBytes < 0 || !validJSONObject(item.StructuredData) || len(item.Summary) > 4000 || len(item.ContentType) > 200 || strings.ContainsAny(item.ContentType, "\r\n") {
-			middleware.WriteError(w, r, http.StatusBadRequest, "EVIDENCE_SUMMARY_TOO_LARGE", "evidence summary exceeds policy")
-			return
-		}
-		_, err = tx.Exec(r.Context(), `INSERT INTO evidence(id,organization_id,job_id,source,content_type,summary,structured_data,checksum,module_id,agent_id,vantage_point_id,artifact_kind,size_bytes,observed_at) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,j.vantage_point_id,NULLIF($11,''),$12,$13 FROM analysis_jobs j WHERE j.organization_id=$2 AND j.id=$3`, item.EvidenceID, org, id, item.Source, item.ContentType, item.Summary, item.StructuredData, item.SHA256, moduleID, agent, item.ArtifactKind, item.SizeBytes, input.CompletedAt)
+		_, err = tx.Exec(r.Context(), `UPDATE evidence SET observation_id=$4 WHERE organization_id=$1 AND job_id=$2 AND id=$3 AND observation_id IS NULL; INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) VALUES($1,$5,'observation.created','observation',$4::text,'success',jsonb_build_object('evidenceId',$3::text))`, org, id, item.EvidenceID, observationID, agent)
 		if err != nil {
-			middleware.WriteError(w, r, http.StatusBadRequest, "EVIDENCE_IMPORT_FAILED", "normalized evidence is invalid")
+			middleware.WriteError(w, r, http.StatusInternalServerError, "OBSERVATION_IMPORT_FAILED", "observation relationship could not be stored")
 			return
 		}
 	}
@@ -375,13 +402,13 @@ func (h Agent) Fail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	allowed := map[string]bool{"MODULE_UNAVAILABLE": true, "TOOL_NOT_FOUND": true, "CAPABILITY_MISSING": true, "INVALID_JOB": true, "JOB_EXPIRED": true, "TARGET_REJECTED": true, "TIMEOUT": true, "PROCESS_FAILED": true, "OUTPUT_LIMIT_EXCEEDED": true, "ARTIFACT_ERROR": true, "CANCELLED": true, "PROTOCOL_INCOMPATIBLE": true, "SIGNATURE_INVALID": true, "INTERNAL_ERROR": true}
+	allowed := map[string]bool{"MODULE_UNAVAILABLE": true, "TOOL_NOT_FOUND": true, "CAPABILITY_MISSING": true, "INVALID_JOB": true, "JOB_EXPIRED": true, "TARGET_REJECTED": true, "TIMEOUT": true, "PROCESS_FAILED": true, "OUTPUT_LIMIT_EXCEEDED": true, "ARTIFACT_ERROR": true, "CANCELLED": true, "PROTOCOL_INCOMPATIBLE": true, "SIGNATURE_INVALID": true, "REPLAY_REJECTED": true, "INTERNAL_ERROR": true}
 	id := domain.ID(chi.URLParam(r, "id"))
 	if len(input.Summary) > 2000 || input.OccurredAt.IsZero() || !allowed[input.Code] || input.JobID != id || input.AgentID != middleware.AgentID(r.Context()) || agents.RequireCompatible(input.ProtocolVersion) != nil {
 		middleware.WriteError(w, r, http.StatusBadRequest, "FAILURE_INVALID", "failure code or summary is invalid")
 		return
 	}
-	tag, err := h.Enrollment.Pool.Exec(r.Context(), `WITH changed AS (UPDATE analysis_jobs SET status=CASE $4 WHEN 'CANCELLED' THEN 'CANCELLED' WHEN 'TIMEOUT' THEN 'TIMED_OUT' ELSE 'FAILED' END,completed_at=now(),status_version=status_version+1,rejection_code=$4 WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status IN ('ASSIGNED','RUNNING') RETURNING id) INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) SELECT $1,$2,CASE WHEN $4='SIGNATURE_INVALID' THEN 'job.signature_rejected' WHEN $4='PROTOCOL_INCOMPATIBLE' THEN 'agent.protocol_incompatible' ELSE 'job.completed' END,'job',id::text,'failed',jsonb_build_object('code',$4,'summary',$5) FROM changed`, middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), id, input.Code, input.Summary)
+	tag, err := h.Enrollment.Pool.Exec(r.Context(), `WITH changed AS (UPDATE analysis_jobs SET status=CASE $4 WHEN 'CANCELLED' THEN 'CANCELLED' WHEN 'TIMEOUT' THEN 'TIMED_OUT' ELSE 'FAILED' END,completed_at=now(),status_version=status_version+1,rejection_code=$4 WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status IN ('ASSIGNED','RUNNING') RETURNING id) INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome,metadata) SELECT $1,$2,CASE WHEN $4='SIGNATURE_INVALID' THEN 'job.signature_invalid' WHEN $4='REPLAY_REJECTED' THEN 'job.replay_rejected' WHEN $4='PROTOCOL_INCOMPATIBLE' THEN 'agent.protocol_incompatible' ELSE 'job.completed' END,'job',id::text,'failed',jsonb_build_object('code',$4,'summary',$5) FROM changed`, middleware.OrganizationID(r.Context()), middleware.AgentID(r.Context()), id, input.Code, input.Summary)
 	if err != nil || tag.RowsAffected() != 1 {
 		middleware.WriteError(w, r, http.StatusConflict, "JOB_STATE_INVALID", "job failure transition was rejected")
 		return

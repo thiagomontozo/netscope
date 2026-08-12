@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 type ObjectStorage interface {
@@ -31,7 +32,7 @@ func NewLocal(root string) (*Local, error) {
 	return &Local{root: absolute}, nil
 }
 func (l *Local) path(key string) (string, error) {
-	if !safeKey.MatchString(key) || filepath.IsAbs(key) {
+	if !safeKey.MatchString(key) || filepath.IsAbs(key) || hasParentSegment(key) {
 		return "", errors.New("invalid storage key")
 	}
 	p := filepath.Clean(filepath.Join(l.root, filepath.FromSlash(key)))
@@ -40,6 +41,15 @@ func (l *Local) path(key string) (string, error) {
 		return "", errors.New("storage key escapes root")
 	}
 	return p, nil
+}
+
+func hasParentSegment(key string) bool {
+	for _, segment := range strings.Split(key, "/") {
+		if segment == ".." || segment == "." {
+			return true
+		}
+	}
+	return false
 }
 func (l *Local) Put(ctx context.Context, key string, source io.Reader) error {
 	p, err := l.path(key)

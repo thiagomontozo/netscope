@@ -15,6 +15,10 @@ func DefaultCertificatePolicy() CertificatePolicy {
 	return CertificatePolicy{Lifetime: 90 * 24 * time.Hour, RotationBeforeExpiration: 14 * 24 * time.Hour, RotationGracePeriod: 24 * time.Hour}
 }
 
+func (p CertificatePolicy) NeedsRotation(expiresAt, now time.Time) bool {
+	return !expiresAt.After(now) || expiresAt.Sub(now) <= p.RotationBeforeExpiration
+}
+
 type RotationService struct {
 	Pool   *pgxpool.Pool
 	CA     *CertificateAuthority
@@ -37,9 +41,15 @@ func (s RotationService) Request(ctx context.Context, organizationID, agentID do
 		return RotationResult{}, err
 	}
 	defer tx.Rollback(ctx)
-	var status string
-	if err := tx.QueryRow(ctx, `SELECT status FROM agents WHERE organization_id=$1 AND id=$2 FOR UPDATE`, organizationID, agentID).Scan(&status); err != nil || status == "REVOKED" {
+	var status, rotationStatus string
+	if err := tx.QueryRow(ctx, `SELECT status,certificate_rotation_status FROM agents WHERE organization_id=$1 AND id=$2 FOR UPDATE`, organizationID, agentID).Scan(&status, &rotationStatus); err != nil || status == "REVOKED" {
 		return RotationResult{}, errors.New("agent is not eligible for rotation")
+	}
+	if rotationStatus != "IDLE" && rotationStatus != "COMPLETED" && rotationStatus != "FAILED" && rotationStatus != "ROLLED_BACK" {
+		return RotationResult{}, errors.New("a certificate rotation is already in progress")
+	}
+	if _, err = tx.Exec(ctx, `UPDATE agents SET certificate_rotation_status='REQUESTED' WHERE organization_id=$1 AND id=$2`, organizationID, agentID); err != nil {
+		return RotationResult{}, err
 	}
 	certificate, fingerprint, serial, expires, err := s.CA.SignCSR(organizationID, agentID, csrPEM)
 	if err != nil {
@@ -53,7 +63,7 @@ func (s RotationService) Request(ctx context.Context, organizationID, agentID do
 	if err != nil {
 		return RotationResult{}, err
 	}
-	_, err = tx.Exec(ctx, `UPDATE agents SET certificate_rotation_status='ISSUED' WHERE organization_id=$1 AND id=$2`, organizationID, agentID)
+	_, err = tx.Exec(ctx, `UPDATE agents SET certificate_rotation_status='PENDING_CONFIRMATION' WHERE organization_id=$1 AND id=$2`, organizationID, agentID)
 	if err != nil {
 		return RotationResult{}, err
 	}
@@ -67,24 +77,40 @@ func (s RotationService) Request(ctx context.Context, organizationID, agentID do
 	return RotationResult{CertificateID: certificateID, CertificatePEM: string(certificate), ExpiresAt: expires, Fingerprint: fingerprint, SerialNumber: serial}, nil
 }
 
-func (s RotationService) Confirm(ctx context.Context, organizationID, agentID, certificateID domain.ID) error {
+func (s RotationService) Confirm(ctx context.Context, organizationID, agentID, certificateID domain.ID, presentedFingerprint string) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	var fingerprint, serial string
-	var expires time.Time
-	err = tx.QueryRow(ctx, `UPDATE agent_certificates SET status='ACTIVE' WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status='ROTATING' RETURNING fingerprint,serial_number,not_after`, organizationID, agentID, certificateID).Scan(&fingerprint, &serial, &expires)
+	var notBefore, expires time.Time
+	err = tx.QueryRow(ctx, `UPDATE agent_certificates SET status='ACTIVE' WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status='ROTATING' AND fingerprint=$4 AND EXISTS (SELECT 1 FROM agents WHERE organization_id=$1 AND id=$2 AND status<>'REVOKED' AND certificate_rotation_status IN ('PENDING_CONFIRMATION','ACTIVATING')) RETURNING fingerprint,serial_number,not_before,not_after`, organizationID, agentID, certificateID, presentedFingerprint).Scan(&fingerprint, &serial, &notBefore, &expires)
 	if err != nil {
 		return errors.New("pending rotation certificate was not found")
 	}
-	_, err = tx.Exec(ctx, `UPDATE agent_certificates SET status='SUPERSEDED',replaced_by=$3 WHERE organization_id=$1 AND agent_id=$2 AND id<>$3 AND status='ACTIVE'; UPDATE agents SET identity_fingerprint=$4,certificate_serial=$5,certificate_expires_at=$6,certificate_rotation_status='GRACE_PERIOD' WHERE organization_id=$1 AND id=$2`, organizationID, agentID, certificateID, fingerprint, serial, expires)
+	_, err = tx.Exec(ctx, `UPDATE agent_certificates SET status='SUPERSEDED',replaced_by=$3 WHERE organization_id=$1 AND agent_id=$2 AND id<>$3 AND status='ACTIVE'; UPDATE agents SET previous_certificate_fingerprint=identity_fingerprint,identity_fingerprint=$4,certificate_serial=$5,certificate_not_before=$7,certificate_expires_at=$6,identity_rotated_at=now(),last_certificate_rotation_at=now(),certificate_rotation_status='COMPLETED' WHERE organization_id=$1 AND id=$2`, organizationID, agentID, certificateID, fingerprint, serial, expires, notBefore)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome) VALUES($1,$2,'agent.certificate_rotated','agent_certificate',$3::text,'success')`, organizationID, agentID, certificateID)
 	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s RotationService) Rollback(ctx context.Context, organizationID, agentID, certificateID domain.ID) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	result, err := tx.Exec(ctx, `UPDATE agent_certificates SET status='REVOKED',revoked_at=now() WHERE organization_id=$1 AND agent_id=$2 AND id=$3 AND status='ROTATING'`, organizationID, agentID, certificateID)
+	if err != nil || result.RowsAffected() != 1 {
+		return errors.New("pending rotation certificate was not found")
+	}
+	if _, err = tx.Exec(ctx, `UPDATE agents SET certificate_rotation_status='ROLLED_BACK' WHERE organization_id=$1 AND id=$2 AND status<>'REVOKED'; INSERT INTO audit_events(organization_id,actor_agent_id,event_type,resource_type,resource_id,outcome) VALUES($1,$2,'agent.certificate_rotation_failed','agent_certificate',$3::text,'failure'),($1,$2,'agent.certificate_rotation_rolled_back','agent_certificate',$3::text,'failure')`, organizationID, agentID, certificateID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

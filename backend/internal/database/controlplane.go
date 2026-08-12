@@ -26,6 +26,12 @@ func (s ControlPlane) ValidateAgentFingerprint(ctx context.Context, fingerprint 
 	err := s.Pool.QueryRow(ctx, `SELECT organization_id::text,id::text FROM agents WHERE identity_fingerprint=$1 AND status IN ('ONLINE','DEGRADED','OFFLINE') AND (certificate_expires_at IS NULL OR certificate_expires_at>now())`, fingerprint).Scan(&org, &agent)
 	return org, agent, err
 }
+
+func (s ControlPlane) ValidateRotatingAgentFingerprint(ctx context.Context, fingerprint string) (domain.ID, domain.ID, error) {
+	var org, agent domain.ID
+	err := s.Pool.QueryRow(ctx, `SELECT c.organization_id::text,c.agent_id::text FROM agent_certificates c JOIN agents a ON a.organization_id=c.organization_id AND a.id=c.agent_id WHERE c.fingerprint=$1 AND c.status='ROTATING' AND c.not_after>now() AND a.status IN ('ONLINE','DEGRADED','OFFLINE') AND a.certificate_rotation_status IN ('ISSUED','PENDING_CONFIRMATION','ACTIVATING')`, fingerprint).Scan(&org, &agent)
+	return org, agent, err
+}
 func (s ControlPlane) GetForOrganization(ctx context.Context, organizationID, scopeID domain.ID) (domain.AuthorizedScope, error) {
 	var v domain.AuthorizedScope
 	err := s.Pool.QueryRow(ctx, `SELECT id,organization_id,type,value,environment,status,coalesce(verification_type,''),verified_at,verified_by,valid_from,valid_until,notes,created_at FROM authorized_scopes WHERE organization_id=$1 AND id=$2`, organizationID, scopeID).Scan(&v.ID, &v.OrganizationID, &v.Type, &v.Value, &v.Environment, &v.Status, &v.VerificationType, &v.VerifiedAt, &v.VerifiedBy, &v.ValidFrom, &v.ValidUntil, &v.Notes, &v.CreatedAt)

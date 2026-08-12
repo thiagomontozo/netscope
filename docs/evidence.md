@@ -16,3 +16,9 @@ Evidence preserves provenance for a job, optional observation and optional findi
 Small normalized evidence can live in PostgreSQL. Large or sensitive artifacts use Object Storage. Keys are generated internally and validated; filenames never become paths. Checksums detect accidental corruption but do not alone establish custody.
 
 `findings.read` does not imply `evidence.raw.read`. Raw PCAP additionally requires `pcap.download`. Access is organization-bound, audited and subject to retention. Evidence summaries should be sufficient for routine review while Technical Evidence gives authorized analysts the source detail.
+
+v0.2.1 makes `Evidence.artifact_id` and `Observation.evidence_id` explicit.
+Result ingestion creates receipt, Evidence, Observation, provenance links,
+audits and terminal job state in one PostgreSQL transaction. An unavailable,
+failed, checksum-mismatched or cross-organization Artifact rejects the entire
+result. Exact retries do not duplicate any entity.

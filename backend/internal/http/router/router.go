@@ -107,6 +107,7 @@ func New(logger *slog.Logger, registry *modules.Registry, runtime Runtime) http.
 	})
 	agentHandler := handlers.Agent{Enrollment: runtime.Enrollment, Signer: runtime.JobSigner, RequireSignedJobs: runtime.RequireSignedJobs, Rotation: agents.RotationService{Pool: runtime.Store.Pool, CA: runtime.Enrollment.CA, Policy: agents.DefaultCertificatePolicy()}}
 	r.With(appmw.RateLimit(10, time.Minute)).Post("/agent/v1/enroll", agentHandler.Enroll)
+	r.With(appmw.RotatingAgentIdentity(runtime.Store), appmw.RateLimit(12, time.Minute)).Post("/agent/v1/identity/rotate/confirm", agentHandler.ConfirmIdentityRotation)
 	r.Route("/agent/v1", func(agent chi.Router) {
 		agent.Use(appmw.AgentIdentity(runtime.Store))
 		h := agentHandler
@@ -114,7 +115,7 @@ func New(logger *slog.Logger, registry *modules.Registry, runtime Runtime) http.
 		agent.Post("/capabilities", h.Capabilities)
 		agent.Post("/evidence", h.Evidence)
 		agent.With(appmw.RateLimit(6, time.Minute)).Post("/identity/rotate", h.RotateIdentity)
-		agent.With(appmw.RateLimit(12, time.Minute)).Post("/identity/rotate/confirm", h.ConfirmIdentityRotation)
+		agent.With(appmw.RateLimit(12, time.Minute)).Post("/identity/rotate/rollback", h.RollbackIdentityRotation)
 		agent.MethodFunc(http.MethodGet, "/jobs/next", h.NextJob)
 		agent.MethodFunc(http.MethodPost, "/jobs/next", h.NextJob)
 		agent.Post("/jobs/{id}/start", h.StartJob)

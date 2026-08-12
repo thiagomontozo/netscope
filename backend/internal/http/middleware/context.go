@@ -14,10 +14,11 @@ import (
 type contextKey string
 
 const (
-	requestIDKey      contextKey = "request-id"
-	organizationIDKey contextKey = "organization-id"
-	userIDKey         contextKey = "user-id"
-	agentIDKey        contextKey = "agent-id"
+	requestIDKey        contextKey = "request-id"
+	organizationIDKey   contextKey = "organization-id"
+	userIDKey           contextKey = "user-id"
+	agentIDKey          contextKey = "agent-id"
+	agentFingerprintKey contextKey = "agent-certificate-fingerprint"
 )
 
 func RequestID(next http.Handler) http.Handler {
@@ -69,6 +70,7 @@ func UserID(ctx context.Context) domain.ID {
 
 type AgentStore interface {
 	ValidateAgentFingerprint(context.Context, string) (domain.ID, domain.ID, error)
+	ValidateRotatingAgentFingerprint(context.Context, string) (domain.ID, domain.ID, error)
 }
 
 func AgentIdentity(store AgentStore) func(http.Handler) http.Handler {
@@ -88,9 +90,39 @@ func AgentIdentity(store AgentStore) func(http.Handler) http.Handler {
 			}
 			ctx := context.WithValue(r.Context(), organizationIDKey, org)
 			ctx = context.WithValue(ctx, agentIDKey, agent)
+			ctx = context.WithValue(ctx, agentFingerprintKey, fingerprint)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// RotatingAgentIdentity is intentionally limited to the rotation-confirm
+// route. A pending certificate cannot authenticate ordinary Agent APIs.
+func RotatingAgentIdentity(store AgentStore) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 {
+				WriteError(w, r, http.StatusUnauthorized, "AGENT_IDENTITY_REQUIRED", "a verified rotating agent certificate is required")
+				return
+			}
+			digest := sha256.Sum256(r.TLS.PeerCertificates[0].Raw)
+			fingerprint := hex.EncodeToString(digest[:])
+			org, agent, err := store.ValidateRotatingAgentFingerprint(r.Context(), fingerprint)
+			if err != nil {
+				WriteError(w, r, http.StatusUnauthorized, "CERTIFICATE_ROTATION_IDENTITY_INVALID", "the pending certificate is not eligible for activation")
+				return
+			}
+			ctx := context.WithValue(r.Context(), organizationIDKey, org)
+			ctx = context.WithValue(ctx, agentIDKey, agent)
+			ctx = context.WithValue(ctx, agentFingerprintKey, fingerprint)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func AgentFingerprint(ctx context.Context) string {
+	value, _ := ctx.Value(agentFingerprintKey).(string)
+	return value
 }
 func AgentID(ctx context.Context) domain.ID {
 	value, _ := ctx.Value(agentIDKey).(domain.ID)
