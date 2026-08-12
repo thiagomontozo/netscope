@@ -2,7 +2,7 @@
 
 Extensible network diagnostics, observability and security analysis platform built with Go, React and TypeScript.
 
-> Current status: **Experimental**. NetScope is not production-ready and has not yet completed runtime, integration or automated security validation.
+> Current status: **Experimental**. NetScope is not production-ready; safe automated validation does not replace controlled runtime or production-scale validation.
 
 ## Overview
 
@@ -86,7 +86,7 @@ The agent implementation lives in a separate repository: `thiagomontozo/netscope
 
 NetScope Agent Protocol `1.0` is specified under [`contracts/agent/v1`](contracts/agent/v1/README.md). Enrollment, heartbeat, capability manifests, job envelopes, results, failures, cancellation and evidence have machine-readable JSON Schemas. The Control Plane stores `COMPATIBLE`, `UPGRADE_RECOMMENDED`, `INCOMPATIBLE` or `UNKNOWN`; capability and ScanGuard checks remain independent of version compatibility.
 
-Result delivery is idempotent by job and result identity/version. Repeating the accepted result is a no-op; a conflicting result is rejected. Ed25519 envelope signing is a documented, inactive interface until protected key management and trust distribution are configured. mTLS remains mandatory.
+Result delivery is idempotent by job and result identity/version. Repeating the accepted result is a no-op; a conflicting result is rejected. Ed25519 envelope signing loads protected file-backed key material and distributes public trust during authenticated enrollment. mTLS remains mandatory.
 
 ## Trusted Agent Communication
 
@@ -97,6 +97,15 @@ certificate lifecycle/rotation records, contract fixtures and safe integration
 tests. mTLS remains mandatory and no unsigned fallback occurs when signed-job
 policy is enabled. This remains Experimental: HSM/OCSP, multipart resume,
 automatic Agent updates and production-scale load validation are not included.
+
+### Protocol Reliability Hardening (v0.2.1)
+
+- RFC 8785 deterministic signed-payload canonicalization with decimal-safe parameters.
+- Cross-repository canonical, SHA-256 and Ed25519 vectors.
+- Certificate B activation proof and bounded rollback to certificate A.
+- Streaming Artifact integrity with compensating cleanup.
+- Transactional Artifact → Evidence → Observation linkage and idempotent retries.
+- Safe PostgreSQL integration scenarios in CI.
 
 ## Authorized Scope
 
@@ -318,7 +327,11 @@ compose.yml    local deployment topology
 
 ## Deliberate Boundaries
 
-- Current status remains Experimental. CI now validates builds and migrations, while broad domain-level, integration and end-to-end automated test coverage remains to be developed before production certification.
+- Current status remains Experimental. CI validates builds, migrations and bounded protocol integrations; production-scale load and live network scanner validation are not claimed.
+- No HSM integration or OCSP infrastructure is implemented. One Control Plane signing key is active at a time.
+- Artifact transfer is streaming and retry-safe but has no multipart/resumable protocol.
+- Rate limiting is process-local and is not coordinated across Control Plane replicas.
+- Automatic Agent binary updates are not implemented.
 - Network tool execution remains in the separate `netscope-agent` repository by design. This repository contains no scanner binary or arbitrary command runner.
 - NATS JetStream and ClickHouse remain optional future transports/stores behind existing boundaries; PostgreSQL and HTTPS polling are the required v0.1 path.
 - Outbound email and enterprise secret-manager products are deployment-specific adapters. TOTP setup, one-time recovery codes, encrypted secrets and logout-all are implemented without requiring them.

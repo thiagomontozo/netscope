@@ -52,7 +52,7 @@ jobs:
         run: go test ./...
 
       - name: Validate Protocol 1.x contracts and trust invariants
-        run: go test ./internal/contracttest ./internal/agents ./internal/artifacts
+        run: go test ./internal/contracttest ./internal/canonicaljson ./internal/agents ./internal/artifacts
 
       - name: Build server
         run: go build -trimpath ./cmd/server
@@ -112,6 +112,18 @@ jobs:
             psql --host localhost --username netscope --dbname netscope \
               --set ON_ERROR_STOP=on --file "$migration"
           done
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Run safe transactional protocol integration
+        working-directory: backend
+        env:
+          NETSCOPE_TEST_DATABASE_URL: postgres://netscope:ci-only-password@localhost:5432/netscope?sslmode=disable
+        run: go test ./internal/integration -count=1
 
   containers:
     name: Container builds
