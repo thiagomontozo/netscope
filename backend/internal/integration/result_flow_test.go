@@ -221,16 +221,22 @@ func TestCertificateRotationSuccessAndRollback(t *testing.T) {
 func seed(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	_, _ = pool.Exec(context.Background(), `DELETE FROM audit_events; DELETE FROM agent_result_receipts; UPDATE evidence SET observation_id=NULL; UPDATE observations SET evidence_id=NULL; DELETE FROM observations; DELETE FROM evidence; DELETE FROM artifacts; DELETE FROM analysis_jobs; DELETE FROM authorized_scopes; DELETE FROM assets; DELETE FROM agent_certificates; DELETE FROM agents; DELETE FROM users; DELETE FROM organizations`)
-	_, err := pool.Exec(context.Background(), `
-INSERT INTO organizations(id,name,slug) VALUES($1,'TEST ONLY Org','test-only-org'),('99999999-9999-4999-8999-999999999999','TEST ONLY Other','test-only-other');
-INSERT INTO users(id,organization_id,name,email,password_hash) VALUES($2,$1,'Test','test@example.invalid','unused');
-INSERT INTO authorized_scopes(id,organization_id,type,value,environment,status,valid_from,valid_until) VALUES($3,$1,'HOSTNAME','fixture.test.invalid','INTERNAL','APPROVED',now()-interval '1 hour',now()+interval '1 hour');
-INSERT INTO assets(id,organization_id,name,type,environment,criticality) VALUES($4,$1,'fixture','HOST','INTERNAL','LOW');
-INSERT INTO agents(id,organization_id,name,hostname,os,arch,version,status,identity_fingerprint,protocol_version,compatibility_status,certificate_serial,certificate_expires_at) VALUES($5,$1,'fixture','fixture','test','amd64','0.2.1-experimental','ONLINE',repeat('a',64),'1.0','COMPATIBLE','test-serial',now()+interval '1 day');
-INSERT INTO agent_certificates(organization_id,agent_id,serial_number,fingerprint,not_before,not_after,status) VALUES($1,$5,'test-serial',repeat('a',64),now()-interval '1 hour',now()+interval '1 day','ACTIVE');
-INSERT INTO module_definitions(id,name,version,category,risk_class,supported_environments,required_capabilities,default_timeout_seconds,input_schema,result_schema) VALUES('mock.safe','Mock safe','0.2.1','test','PASSIVE','{INTERNAL}','{}',30,'{"type":"object"}','{"type":"object"}') ON CONFLICT(id) DO NOTHING`, testOrg, testUser, testScope, testAsset, testAgent)
-	if err != nil {
-		t.Fatal(err)
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO organizations(id,name,slug) VALUES($1,'TEST ONLY Org','test-only-org'),('99999999-9999-4999-8999-999999999999','TEST ONLY Other','test-only-other')`, []any{testOrg}},
+		{`INSERT INTO users(id,organization_id,name,email,password_hash) VALUES($1,$2,'Test','test@example.invalid','unused')`, []any{testUser, testOrg}},
+		{`INSERT INTO authorized_scopes(id,organization_id,type,value,environment,status,valid_from,valid_until) VALUES($1,$2,'HOSTNAME','fixture.test.invalid','INTERNAL','APPROVED',now()-interval '1 hour',now()+interval '1 hour')`, []any{testScope, testOrg}},
+		{`INSERT INTO assets(id,organization_id,name,type,environment,criticality) VALUES($1,$2,'fixture','HOST','INTERNAL','LOW')`, []any{testAsset, testOrg}},
+		{`INSERT INTO agents(id,organization_id,name,hostname,os,arch,version,status,identity_fingerprint,protocol_version,compatibility_status,certificate_serial,certificate_expires_at) VALUES($1,$2,'fixture','fixture','test','amd64','0.2.1-experimental','ONLINE',repeat('a',64),'1.0','COMPATIBLE','test-serial',now()+interval '1 day')`, []any{testAgent, testOrg}},
+		{`INSERT INTO agent_certificates(organization_id,agent_id,serial_number,fingerprint,not_before,not_after,status) VALUES($1,$2,'test-serial',repeat('a',64),now()-interval '1 hour',now()+interval '1 day','ACTIVE')`, []any{testOrg, testAgent}},
+		{`INSERT INTO module_definitions(id,name,version,category,risk_class,supported_environments,required_capabilities,default_timeout_seconds,input_schema,result_schema) VALUES('mock.safe','Mock safe','0.2.1','test','PASSIVE','{INTERNAL}','{}',30,'{"type":"object"}','{"type":"object"}') ON CONFLICT(id) DO NOTHING`, nil},
+	}
+	for _, statement := range statements {
+		if _, err := pool.Exec(context.Background(), statement.query, statement.args...); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
