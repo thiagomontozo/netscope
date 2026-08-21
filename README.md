@@ -1,5 +1,8 @@
 # NetScope
 
+[![CI](https://github.com/thiagomontozo/netscope/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thiagomontozo/netscope/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Extensible network diagnostics, observability and security analysis platform built with Go, React and TypeScript.
 
 > Current status: **Experimental**. NetScope is not production-ready; safe automated validation does not replace controlled runtime or production-scale validation.
